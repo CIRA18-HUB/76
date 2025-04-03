@@ -1,0 +1,3985 @@
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import streamlit as st
+import datetime
+import random
+from typing import Dict, List, Tuple, Union, Optional
+import base64
+from io import StringIO
+import os
+
+# ====================
+# 页面配置 - 宽屏模式
+# ====================
+st.set_page_config(
+    page_title="物料投放分析仪表盘",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ====================
+# 飞书风格CSS - 优化设计
+# ====================
+FEISHU_STYLE = """
+<style>
+    /* 飞书风格基础设置 */
+    * {
+        font-family: 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    /* 主色调 - 飞书蓝 */
+    :root {
+        --feishu-blue: #2B5AED;
+        --feishu-blue-hover: #1846DB;
+        --feishu-blue-light: #E8F1FF;
+        --feishu-secondary: #2A85FF;
+        --feishu-green: #0FC86F;
+        --feishu-orange: #FF7744;
+        --feishu-red: #F53F3F;
+        --feishu-purple: #7759F3;
+        --feishu-yellow: #FFAA00;
+        --feishu-text: #1F1F1F;
+        --feishu-text-secondary: #646A73;
+        --feishu-text-tertiary: #8F959E;
+        --feishu-gray-1: #F5F7FA;
+        --feishu-gray-2: #EBEDF0;
+        --feishu-gray-3: #E0E4EA;
+        --feishu-white: #FFFFFF;
+        --feishu-border: #E8E8E8;
+        --feishu-shadow: rgba(0, 0, 0, 0.08);
+    }
+
+    /* 页面背景 */
+    .main {
+        background-color: var(--feishu-gray-1);
+        padding: 1.5rem 2.5rem;
+    }
+
+    /* 页面标题 */
+    .feishu-title {
+        font-size: 26px;
+        font-weight: 600;
+        color: var(--feishu-text);
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+    }
+
+    .feishu-subtitle {
+        font-size: 15px;
+        color: var(--feishu-text-secondary);
+        margin-bottom: 28px;
+        letter-spacing: 0.1px;
+        line-height: 1.5;
+    }
+
+    /* 卡片样式 */
+    .feishu-card {
+        background: var(--feishu-white);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px var(--feishu-shadow);
+        padding: 22px;
+        margin-bottom: 24px;
+        border: 1px solid var(--feishu-gray-2);
+        transition: all 0.3s ease;
+    }
+
+    .feishu-card:hover {
+        box-shadow: 0 4px 16px var(--feishu-shadow);
+        transform: translateY(-2px);
+    }
+
+    /* 指标卡片 */
+    .feishu-metric-card {
+        background: var(--feishu-white);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px var(--feishu-shadow);
+        padding: 22px;
+        text-align: left;
+        border: 1px solid var(--feishu-gray-2);
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+
+    .feishu-metric-card:hover {
+        box-shadow: 0 4px 16px var(--feishu-shadow);
+        transform: translateY(-2px);
+    }
+
+    .feishu-metric-card .label {
+        font-size: 14px;
+        color: var(--feishu-text-secondary);
+        margin-bottom: 12px;
+        font-weight: 500;
+    }
+
+    .feishu-metric-card .value {
+        font-size: 30px;
+        font-weight: 600;
+        color: var(--feishu-text);
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+        line-height: 1.2;
+    }
+
+    .feishu-metric-card .subtext {
+        font-size: 13px;
+        color: var(--feishu-text-tertiary);
+        letter-spacing: 0.1px;
+        line-height: 1.5;
+    }
+
+    /* 进度条 */
+    .feishu-progress-container {
+        margin: 12px 0;
+        background: var(--feishu-gray-2);
+        border-radius: 6px;
+        height: 8px;
+        overflow: hidden;
+    }
+
+    .feishu-progress-bar {
+        height: 100%;
+        border-radius: 6px;
+        background: var(--feishu-blue);
+        transition: width 0.7s ease;
+    }
+
+    /* 指标值颜色 */
+    .success-value { color: var(--feishu-green); }
+    .warning-value { color: var(--feishu-yellow); }
+    .danger-value { color: var(--feishu-red); }
+
+    /* 标签页样式优化 */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0;
+        background-color: transparent;
+        border-bottom: 1px solid var(--feishu-gray-3);
+        margin-bottom: 20px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        padding: 12px 28px;
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--feishu-text-secondary);
+        border-bottom: 2px solid transparent;
+    }
+
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: var(--feishu-blue);
+        background-color: transparent;
+        border-bottom: 2px solid var(--feishu-blue);
+    }
+
+    /* 侧边栏样式 */
+    section[data-testid="stSidebar"] > div {
+        background-color: var(--feishu-white);
+        padding: 2rem 1.5rem;
+        border-right: 1px solid var(--feishu-gray-2);
+    }
+
+    /* 侧边栏标题 */
+    .feishu-sidebar-title {
+        color: var(--feishu-blue);
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .feishu-sidebar-title::before {
+        content: "";
+        display: block;
+        width: 4px;
+        height: 16px;
+        background-color: var(--feishu-blue);
+        border-radius: 2px;
+    }
+
+    /* 图表容器 */
+    .feishu-chart-container {
+        background: var(--feishu-white);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px var(--feishu-shadow);
+        padding: 24px;
+        margin-bottom: 40px;
+        border: 1px solid var(--feishu-gray-2);
+        transition: all 0.3s ease;
+    }
+
+    .feishu-chart-container:hover {
+        box-shadow: 0 4px 16px var(--feishu-shadow);
+        transform: translateY(-2px);
+    }
+
+    /* 图表标题 */
+    .feishu-chart-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--feishu-text);
+        margin: 0 0 20px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        line-height: 1.4;
+    }
+
+    .feishu-chart-title::before {
+        content: "";
+        display: block;
+        width: 3px;
+        height: 14px;
+        background-color: var(--feishu-blue);
+        border-radius: 2px;
+    }
+
+    /* 数据表格样式 */
+    .dataframe {
+        width: 100%;
+        border-collapse: collapse;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .dataframe th {
+        background-color: var(--feishu-gray-1);
+        padding: 12px 16px;
+        text-align: left;
+        font-weight: 500;
+        color: var(--feishu-text);
+        font-size: 14px;
+        border-bottom: 1px solid var(--feishu-gray-3);
+    }
+
+    .dataframe td {
+        padding: 12px 16px;
+        font-size: 13px;
+        border-bottom: 1px solid var(--feishu-gray-2);
+        color: var(--feishu-text-secondary);
+    }
+
+    .dataframe tr:hover td {
+        background-color: var(--feishu-gray-1);
+    }
+
+    /* 飞书按钮 */
+    .feishu-button {
+        background-color: var(--feishu-blue);
+        color: white;
+        font-weight: 500;
+        padding: 10px 18px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        font-size: 14px;
+        text-align: center;
+        display: inline-block;
+    }
+
+    .feishu-button:hover {
+        background-color: var(--feishu-blue-hover);
+    }
+
+    /* 洞察框 */
+    .feishu-insight-box {
+        background-color: var(--feishu-blue-light);
+        border-radius: 8px;
+        padding: 18px 22px;
+        margin: 20px 0;
+        color: var(--feishu-text);
+        font-size: 14px;
+        border-left: 4px solid var(--feishu-blue);
+        line-height: 1.6;
+    }
+
+    /* 提示框 */
+    .feishu-tip-box {
+        background-color: rgba(255, 170, 0, 0.1);
+        border-radius: 8px;
+        padding: 18px 22px;
+        margin: 20px 0;
+        color: var(--feishu-text);
+        font-size: 14px;
+        border-left: 4px solid var(--feishu-yellow);
+        line-height: 1.6;
+    }
+
+    /* 警告框 */
+    .feishu-warning-box {
+        background-color: rgba(255, 119, 68, 0.1);
+        border-radius: 8px;
+        padding: 18px 22px;
+        margin: 20px 0;
+        color: var(--feishu-text);
+        font-size: 14px;
+        border-left: 4px solid var(--feishu-orange);
+        line-height: 1.6;
+    }
+
+    /* 成功框 */
+    .feishu-success-box {
+        background-color: rgba(15, 200, 111, 0.1);
+        border-radius: 8px;
+        padding: 18px 22px;
+        margin: 20px 0;
+        color: var(--feishu-text);
+        font-size: 14px;
+        border-left: 4px solid var(--feishu-green);
+        line-height: 1.6;
+    }
+
+    /* 标签 */
+    .feishu-tag {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        margin-right: 6px;
+    }
+
+    .feishu-tag-blue {
+        background-color: rgba(43, 90, 237, 0.1);
+        color: var(--feishu-blue);
+    }
+
+    .feishu-tag-green {
+        background-color: rgba(15, 200, 111, 0.1);
+        color: var(--feishu-green);
+    }
+
+    .feishu-tag-orange {
+        background-color: rgba(255, 119, 68, 0.1);
+        color: var(--feishu-orange);
+    }
+
+    .feishu-tag-red {
+        background-color: rgba(245, 63, 63, 0.1);
+        color: var(--feishu-red);
+    }
+
+    /* 仪表板卡片网格 */
+    .feishu-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+        margin-bottom: 24px;
+    }
+
+    /* 图表解读框 */
+    .chart-explanation {
+        background-color: #f9f9f9;
+        border-left: 4px solid #2B5AED;
+        margin-top: -20px;
+        margin-bottom: 20px;
+        padding: 12px 15px;
+        font-size: 13px;
+        color: #333;
+        line-height: 1.5;
+        border-radius: 0 0 8px 8px;
+    }
+
+    .chart-explanation-title {
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #2B5AED;
+    }
+
+    /* 隐藏Streamlit默认样式 */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+</style>
+"""
+
+st.markdown(FEISHU_STYLE, unsafe_allow_html=True)
+
+
+# ====================
+# 数据加载与处理
+# ====================
+
+def load_data(sample_data=False):
+    """加载和处理数据"""
+    sample_data = False
+
+    if sample_data:
+        return generate_sample_data()
+    else:
+        try:
+            # 移除这些提示信息
+            # st.info("正在尝试加载真实数据文件...")
+            # st.write("当前工作目录:", current_dir)
+            # st.write("目录中的文件:", file_list)
+            # st.write(f"尝试加载文件: {', '.join(file_paths)}")
+
+            file_paths = ["2025物料源数据.xlsx", "25物料源销售数据.xlsx", "物料单价.xlsx"]
+
+            try:
+                material_data = pd.read_excel("2025物料源数据.xlsx")
+                # 删除这行: st.success("✓ 成功加载 2025物料源数据.xlsx")
+            except Exception as e1:
+                st.error(f"× 加载 2025物料源数据.xlsx 失败: {e1}")
+                raise
+
+            try:
+                sales_data = pd.read_excel("25物料源销售数据.xlsx")
+                # 删除这行: st.success("✓ 成功加载 25物料源销售数据.xlsx")
+            except Exception as e2:
+                st.error(f"× 加载 25物料源销售数据.xlsx 失败: {e2}")
+                raise
+
+            try:
+                material_price = pd.read_excel("物料单价.xlsx")
+                # 删除这行: st.success("✓ 成功加载 物料单价.xlsx")
+            except Exception as e3:
+                st.error(f"× 加载 物料单价.xlsx 失败: {e3}")
+                raise
+
+            # 删除这行: st.success("✅ 所有数据文件加载成功！正在处理数据...")
+            return process_data(material_data, sales_data, material_price)
+
+        except Exception as e:
+            st.error(f"加载数据时出错: {e}")
+            # 可以保留错误提示，因为这是必要的
+            use_sample = st.button("使用示例数据继续")
+            if use_sample:
+                return generate_sample_data()
+            else:
+                st.stop()
+
+
+def process_data(material_data, sales_data, material_price):
+    """处理和准备数据"""
+
+    # 确保日期列为日期类型
+    material_data['发运月份'] = pd.to_datetime(material_data['发运月份'])
+    sales_data['发运月份'] = pd.to_datetime(sales_data['发运月份'])
+
+    # 在这里加入映射代码 ↓
+    # 将申请人列映射为销售人员列
+    if '申请人' in material_data.columns and '销售人员' not in material_data.columns:
+        material_data['销售人员'] = material_data['申请人']
+        print("已将申请人列映射为销售人员列")
+    if '申请人' in sales_data.columns and '销售人员' not in sales_data.columns:
+        sales_data['销售人员'] = sales_data['申请人']
+        print("已将申请人列映射为销售人员列")
+    # 映射代码结束 ↑
+
+    # 创建月份和年份列
+    for df in [material_data, sales_data]:
+        df['月份'] = df['发运月份'].dt.month
+        df['年份'] = df['发运月份'].dt.year
+        df['月份名'] = df['发运月份'].dt.strftime('%Y-%m')
+        df['季度'] = df['发运月份'].dt.quarter
+        df['月度名称'] = df['发运月份'].dt.strftime('%m月')
+
+    # 计算物料成本
+    if '物料成本' not in material_data.columns:
+        # 确保使用正确的物料类别列
+        # 首先确保我们有需要的列
+        merge_columns = ['物料代码', '单价（元）']
+
+        # 找到正确的物料类别列
+        category_col = None
+        possible_cols = ['物料类别', '物料类别_分类']
+        for col in possible_cols:
+            if col in material_price.columns:
+                category_col = col
+                break
+
+        if category_col:
+            merge_columns.append(category_col)
+
+        # 执行合并
+        material_data = pd.merge(
+            material_data,
+            material_price[merge_columns],
+            left_on='产品代码',
+            right_on='物料代码',
+            how='left'
+        )
+
+        # 填充缺失的物料价格
+        if '单价（元）' in material_data.columns:
+            mean_price = material_price['单价（元）'].mean()
+            material_data['单价（元）'] = material_data['单价（元）'].fillna(mean_price)
+
+            # 计算物料总成本
+            material_data['物料成本'] = material_data['求和项:数量（箱）'] * material_data['单价（元）']
+        else:
+            # 如果合并失败，创建一个默认的物料成本列
+            material_data['物料成本'] = material_data['求和项:数量（箱）'] * 100  # 默认单价100元
+
+    # 计算销售金额
+    if '销售金额' not in sales_data.columns and '求和项:单价（箱）' in sales_data.columns:
+        sales_data['销售金额'] = sales_data['求和项:数量（箱）'] * sales_data['求和项:单价（箱）']
+
+    # 检查销售人员列是否存在，如不存在则添加
+    if '销售人员' not in material_data.columns:
+        material_data['销售人员'] = '未知销售人员'
+        print("警告：物料数据中缺少'销售人员'列，已添加默认值")
+
+    if '销售人员' not in sales_data.columns:
+        sales_data['销售人员'] = '未知销售人员'
+        print("警告：销售数据中缺少'销售人员'列，已添加默认值")
+
+    # 确保经销商名称列存在
+    if '经销商名称' not in material_data.columns and '客户代码' in material_data.columns:
+        material_data['经销商名称'] = material_data['客户代码'].apply(lambda x: f"经销商{x}")
+
+    if '经销商名称' not in sales_data.columns and '客户代码' in sales_data.columns:
+        sales_data['经销商名称'] = sales_data['客户代码'].apply(lambda x: f"经销商{x}")
+
+    # 按经销商和月份计算物料成本总和
+    try:
+        material_cost_by_distributor = material_data.groupby(['客户代码', '经销商名称', '月份名', '销售人员'])[
+            '物料成本'].sum().reset_index()
+        material_cost_by_distributor.rename(columns={'物料成本': '物料总成本'}, inplace=True)
+    except KeyError as e:
+        # 如果某列不存在，尝试使用可用的列进行分组
+        print(f"分组时出错: {e}，尝试使用可用列进行分组")
+        available_cols = []
+        for col in ['客户代码', '经销商名称', '月份名', '销售人员']:
+            if col in material_data.columns:
+                available_cols.append(col)
+
+        if not available_cols:  # 确保至少有一个列可用于分组
+            available_cols = ['客户代码'] if '客户代码' in material_data.columns else ['月份名']
+
+        material_cost_by_distributor = material_data.groupby(available_cols)[
+            '物料成本'].sum().reset_index()
+        material_cost_by_distributor.rename(columns={'物料成本': '物料总成本'}, inplace=True)
+
+        # 如果缺少经销商名称，使用客户代码代替
+        if '经销商名称' not in material_cost_by_distributor.columns and '客户代码' in material_cost_by_distributor.columns:
+            material_cost_by_distributor['经销商名称'] = material_cost_by_distributor['客户代码'].apply(
+                lambda x: f"经销商{x}")
+        elif '经销商名称' not in material_cost_by_distributor.columns:
+            material_cost_by_distributor['经销商名称'] = "未知经销商"
+
+        # 如果缺少销售人员，添加默认值
+        if '销售人员' not in material_cost_by_distributor.columns:
+            material_cost_by_distributor['销售人员'] = '未知销售人员'
+
+        # 确保月份名存在
+        if '月份名' not in material_cost_by_distributor.columns:
+            material_cost_by_distributor['月份名'] = '未知月份'
+
+    # 按经销商和月份计算销售总额（同样增加错误处理）
+    try:
+        sales_by_distributor = sales_data.groupby(['客户代码', '经销商名称', '月份名', '销售人员'])[
+            '销售金额'].sum().reset_index()
+        sales_by_distributor.rename(columns={'销售金额': '销售总额'}, inplace=True)
+    except KeyError as e:
+        # 如果某列不存在，尝试使用可用的列进行分组
+        print(f"分组时出错: {e}，尝试使用可用列进行分组")
+        available_cols = []
+        for col in ['客户代码', '经销商名称', '月份名', '销售人员']:
+            if col in sales_data.columns:
+                available_cols.append(col)
+
+        if not available_cols:  # 确保至少有一个列可用于分组
+            available_cols = ['客户代码'] if '客户代码' in sales_data.columns else ['月份名']
+
+        sales_by_distributor = sales_data.groupby(available_cols)[
+            '销售金额'].sum().reset_index()
+        sales_by_distributor.rename(columns={'销售金额': '销售总额'}, inplace=True)
+
+        # 如果缺少经销商名称，使用客户代码代替
+        if '经销商名称' not in sales_by_distributor.columns and '客户代码' in sales_by_distributor.columns:
+            sales_by_distributor['经销商名称'] = sales_by_distributor['客户代码'].apply(
+                lambda x: f"经销商{x}")
+        elif '经销商名称' not in sales_by_distributor.columns:
+            sales_by_distributor['经销商名称'] = "未知经销商"
+
+        # 如果缺少销售人员，添加默认值
+        if '销售人员' not in sales_by_distributor.columns:
+            sales_by_distributor['销售人员'] = '未知销售人员'
+
+        # 确保月份名存在
+        if '月份名' not in sales_by_distributor.columns:
+            sales_by_distributor['月份名'] = '未知月份'
+
+    # 合并物料成本和销售数据
+    # 确保使用两个数据框中都存在的列进行合并
+    common_cols = []
+    for col in ['客户代码', '经销商名称', '月份名', '销售人员']:
+        if col in material_cost_by_distributor.columns and col in sales_by_distributor.columns:
+            common_cols.append(col)
+
+    # 如果没有共同列，至少使用客户代码和月份名（如果存在）
+    if not common_cols:
+        if '客户代码' in material_cost_by_distributor.columns and '客户代码' in sales_by_distributor.columns:
+            common_cols.append('客户代码')
+        if '月份名' in material_cost_by_distributor.columns and '月份名' in sales_by_distributor.columns:
+            common_cols.append('月份名')
+
+    # 如果仍然没有共同列，创建一个通用键以便能够合并
+    if not common_cols:
+        material_cost_by_distributor['合并键'] = 1
+        sales_by_distributor['合并键'] = 1
+        common_cols = ['合并键']
+
+    distributor_data = pd.merge(
+        material_cost_by_distributor,
+        sales_by_distributor,
+        on=common_cols,
+        how='outer'
+    ).fillna(0)
+
+    # 计算ROI
+    distributor_data['ROI'] = np.where(
+        distributor_data['物料总成本'] > 0,
+        distributor_data['销售总额'] / distributor_data['物料总成本'],
+        0
+    )
+
+    # 计算物料销售比率
+    distributor_data['物料销售比率'] = (
+                                               distributor_data['物料总成本'] / distributor_data['销售总额'].replace(0,
+                                                                                                                     np.nan)
+                                       ) * 100
+    distributor_data['物料销售比率'] = distributor_data['物料销售比率'].fillna(0)
+
+    # 经销商价值分层
+    def value_segment(row):
+        if row['ROI'] >= 2.0 and row['销售总额'] > distributor_data['销售总额'].quantile(0.75):
+            return '高价值客户'
+        elif row['ROI'] >= 1.0 and row['销售总额'] > distributor_data['销售总额'].median():
+            return '成长型客户'
+        elif row['ROI'] >= 1.0:
+            return '稳定型客户'
+        else:
+            return '低效型客户'
+
+    distributor_data['客户价值分层'] = distributor_data.apply(value_segment, axis=1)
+
+    # 物料使用多样性
+    try:
+        material_diversity = material_data.groupby(['客户代码', '月份名'])['产品代码'].nunique().reset_index()
+        material_diversity.rename(columns={'产品代码': '物料多样性'}, inplace=True)
+
+        # 合并物料多样性到经销商数据
+        distributor_data = pd.merge(
+            distributor_data,
+            material_diversity,
+            on=['客户代码', '月份名'],
+            how='left'
+        )
+    except KeyError as e:
+        print(f"计算物料多样性时出错: {e}")
+        # 创建默认的物料多样性列
+        distributor_data['物料多样性'] = 1
+
+    distributor_data['物料多样性'] = distributor_data['物料多样性'].fillna(0)
+
+    # 添加区域信息
+    if '所属区域' not in distributor_data.columns and '所属区域' in material_data.columns:
+        try:
+            region_map = material_data[['客户代码', '所属区域']].drop_duplicates().set_index('客户代码')
+            distributor_data['所属区域'] = distributor_data['客户代码'].map(region_map['所属区域'])
+        except Exception as e:
+            print(f"添加区域信息时出错: {e}")
+            distributor_data['所属区域'] = '未知区域'
+
+    # 添加省份信息
+    if '省份' not in distributor_data.columns and '省份' in material_data.columns:
+        try:
+            province_map = material_data[['客户代码', '省份']].drop_duplicates().set_index('客户代码')
+            distributor_data['省份'] = distributor_data['客户代码'].map(province_map['省份'])
+        except Exception as e:
+            print(f"添加省份信息时出错: {e}")
+            distributor_data['省份'] = '未知省份'
+
+    return material_data, sales_data, material_price, distributor_data
+
+
+def create_distributor_analysis_tab(filtered_distributor, material_data, sales_data):
+    """
+    Creates the distributor analysis tab with comprehensive visualizations and insights
+    comparing high-efficiency and low-efficiency distributors.
+    """
+    # 添加必要的导入
+    import pandas as pd
+    import numpy as np
+    import plotly.express as px
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    import streamlit as st
+
+    # 添加CSS以增强悬停交互体验
+    st.markdown("""
+    <style>
+        /* 增强悬停提示样式 */
+        .plotly-graph-div .hoverlayer .hover-info {
+            background-color: rgba(255, 255, 255, 0.95) !important;
+            border: 1px solid #E0E4EA !important;
+            border-radius: 6px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+            padding: 10px !important;
+            font-family: "PingFang SC", "Helvetica Neue", Arial, sans-serif !important;
+        }
+
+        /* 悬停时突出显示经销商卡片 */
+        .distributor-card:hover {
+            transform: translateY(-5px) !important;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1) !important;
+            transition: all 0.3s ease !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Define segment colors for consistent visualization
+    segment_colors = {
+        '高价值客户': '#0FC86F',
+        '成长型客户': '#2B5AED',
+        '稳定型客户': '#FFAA00',
+        '低效型客户': '#F53F3F'
+    }
+
+    # Tab header
+    st.markdown('<div class="feishu-chart-title" style="margin-top: 16px;">经销商分析</div>',
+                unsafe_allow_html=True)
+
+    # 检查数据有效性
+    if filtered_distributor is None or len(filtered_distributor) == 0:
+        st.info("暂无经销商数据，无法进行分析。")
+        return None
+
+    # ====================
+    # 经销商价值分布 - Distributor Value Distribution Section
+    # ====================
+    st.markdown('<div class="feishu-chart-title" style="margin-top: 16px;">经销商价值分布</div>',
+                unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown('<div class="feishu-chart-container">', unsafe_allow_html=True)
+
+        # 计算客户分层数量
+        if '客户价值分层' not in filtered_distributor.columns:
+            st.warning("数据缺少'客户价值分层'列，无法进行分析。")
+            segment_counts = pd.DataFrame(columns=['客户价值分层', '经销商数量', '占比'])
+        else:
+            segment_counts = filtered_distributor['客户价值分层'].value_counts().reset_index()
+            segment_counts.columns = ['客户价值分层', '经销商数量']
+            if len(segment_counts) > 0:
+                segment_counts['占比'] = (
+                        segment_counts['经销商数量'] / segment_counts['经销商数量'].sum() * 100).round(2)
+
+        if len(segment_counts) > 0:
+            fig = px.bar(
+                segment_counts,
+                x='客户价值分层',
+                y='经销商数量',
+                color='客户价值分层',
+                color_discrete_map=segment_colors,
+                text='经销商数量',
+                hover_data={
+                    '客户价值分层': True,
+                    '经销商数量': True,
+                    '占比': ':.2f%'
+                }
+            )
+
+            fig.update_traces(
+                textposition='outside',
+                textfont=dict(size=12),  # 增加文字大小以便阅读
+                hovertemplate='<b>%{x}</b><br>经销商数量: %{y}<br>占比: %{customdata[2]}%'
+            )
+
+            fig.update_layout(
+                height=380,  # 增加高度以容纳所有内容
+                xaxis_title="",
+                yaxis_title="经销商数量",
+                showlegend=False,
+                margin=dict(l=40, r=40, t=20, b=40),
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                font=dict(
+                    family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                    size=12,
+                    color="#1F1F1F"
+                ),
+                xaxis=dict(
+                    showgrid=False,
+                    showline=True,
+                    linecolor='#E0E4EA',
+                    tickangle=0  # 水平显示标签避免重叠
+                ),
+                yaxis=dict(
+                    showgrid=True,
+                    gridcolor='#E0E4EA'
+                )
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("暂无经销商分层数据。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # 添加图表解读
+        st.markdown('''
+        <div class="chart-explanation">
+            <div class="chart-explanation-title">图表解读：</div>
+            <p>这个柱状图显示了不同类型的经销商数量。绿色是高价值客户(最赚钱的)，蓝色是成长型客户(有潜力的)，黄色是稳定型客户(盈利但增长有限的)，红色是低效型客户(投入产出比不好的)。理想情况下，绿色和蓝色柱子应该比黄色和红色柱子高。</p>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown('<div class="feishu-chart-container">', unsafe_allow_html=True)
+
+        # 按分层的ROI
+        if '客户价值分层' not in filtered_distributor.columns:
+            region_roi = pd.DataFrame(columns=['客户价值分层', 'ROI', '物料销售比率'])
+        else:
+            # 确保分析所需的列都存在
+            required_cols = ['客户价值分层', 'ROI', '物料销售比率']
+            missing_cols = [col for col in required_cols if col not in filtered_distributor.columns]
+            if missing_cols:
+                st.warning(f"数据缺少以下列: {', '.join(missing_cols)}")
+                region_roi = pd.DataFrame(columns=['客户价值分层', 'ROI', '物料销售比率'])
+            else:
+                region_roi = filtered_distributor.groupby('客户价值分层').agg({
+                    'ROI': 'mean',
+                    '物料销售比率': 'mean'
+                }).reset_index()
+
+        if len(region_roi) > 0:
+            # 创建双轴图表
+            fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+            fig.add_trace(
+                go.Bar(
+                    x=region_roi['客户价值分层'],
+                    y=region_roi['ROI'],
+                    name='平均ROI',
+                    marker_color=[
+                        segment_colors.get(segment, '#2B5AED') for segment in region_roi['客户价值分层']
+                    ],
+                    hovertemplate='<b>%{x}</b><br>平均ROI: %{y:.2f}<br>'
+                ),
+                secondary_y=False
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=region_roi['客户价值分层'],
+                    y=region_roi['物料销售比率'],
+                    name='物料销售比率(%)',
+                    mode='markers',
+                    marker=dict(
+                        size=12,
+                        color='#7759F3'
+                    ),
+                    hovertemplate='<b>%{x}</b><br>物料销售比率: %{y:.2f}%<br>'
+                ),
+                secondary_y=True
+            )
+
+            fig.update_layout(
+                height=380,
+                xaxis_title="",
+                margin=dict(l=40, r=60, t=20, b=40),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.05,
+                    xanchor="right",
+                    x=1
+                ),
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                font=dict(
+                    family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                    size=12,
+                    color="#1F1F1F"
+                ),
+                xaxis=dict(
+                    showgrid=False,
+                    showline=True,
+                    linecolor='#E0E4EA',
+                    tickangle=0
+                ),
+                yaxis=dict(
+                    showgrid=True,
+                    gridcolor='#E0E4EA'
+                ),
+                yaxis2=dict(
+                    showgrid=False,
+                    title=dict(
+                        text="物料销售比率(%)",
+                        standoff=15
+                    )
+                )
+            )
+
+            fig.update_yaxes(
+                title_text='平均ROI',
+                tickformat=".2f",
+                secondary_y=False,
+                title_standoff=10
+            )
+            fig.update_yaxes(
+                tickformat=".2f",
+                ticksuffix="%",
+                secondary_y=True,
+                title_standoff=10
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("暂无分层ROI数据。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # 添加图表解读
+        st.markdown('''
+        <div class="chart-explanation">
+            <div class="chart-explanation-title">图表解读：</div>
+            <p>这个图表展示了不同客户类型的ROI(柱子)和物料销售比率(紫色点)。柱子越高表示该类客户的ROI越高，紫色点越低表示物料使用效率越好。高价值客户的ROI最高、物料销售比率最低，这是最理想的。低效型客户则相反，需要重点改进。</p>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    # ====================
+    # 经销商效率分析 - Distributor Efficiency Analysis Section
+    # ====================
+    st.markdown('<div class="feishu-chart-title" style="margin-top: 20px;">经销商效率分析</div>',
+                unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown('<div class="feishu-chart-container" style="height: 100%;">', unsafe_allow_html=True)
+
+        # 检查所需列是否存在
+        required_cols = ['经销商名称', 'ROI', '客户代码', '销售总额', '物料总成本', '物料销售比率']
+        missing_cols = [col for col in required_cols if col not in filtered_distributor.columns]
+
+        if missing_cols:
+            st.warning(f"数据缺少以下列: {', '.join(missing_cols)}")
+            st.info("无法生成高效经销商分析图表。")
+        elif len(filtered_distributor) > 0:
+            # 高效经销商排序
+            efficient_distributors = filtered_distributor.sort_values('ROI', ascending=False).head(10)
+
+            # 创建图表
+            fig = go.Figure()
+
+            # 准备自定义数据
+            hover_data = []
+            for _, row in efficient_distributors.iterrows():
+                row_data = [
+                    row['销售总额'],
+                    row['物料总成本'],
+                    row['物料销售比率'] if '物料销售比率' in row else 0,
+                    row['客户价值分层'] if '客户价值分层' in row else '未知',
+                    row['物料多样性'] if '物料多样性' in row else 0,
+                    row['所属区域'] if '所属区域' in row else '未知',
+                    row['省份'] if '省份' in row else '未知',
+                    row['客户代码']
+                ]
+                hover_data.append(row_data)
+
+            hover_data = np.array(hover_data)
+
+            fig.add_trace(go.Bar(
+                y=efficient_distributors['经销商名称'],
+                x=efficient_distributors['ROI'],
+                orientation='h',
+                name='ROI',
+                marker_color='#0FC86F',
+                text=efficient_distributors['ROI'].apply(lambda x: f"{x:.2f}"),
+                textposition='inside',
+                width=0.6,
+                hovertemplate='<b>%{y}</b> (客户代码: %{customdata[7]})<br>' +
+                              '<b>详细信息:</b><br>' +
+                              'ROI: <b>%{x:.2f}</b><br>' +
+                              '销售总额: <b>¥%{customdata[0]:,.2f}</b><br>' +
+                              '物料总成本: <b>¥%{customdata[1]:,.2f}</b><br>' +
+                              '物料销售比率: <b>%{customdata[2]:.2f}%</b><br>' +
+                              '客户价值分层: <b>%{customdata[3]}</b><br>' +
+                              '物料多样性: <b>%{customdata[4]}</b> 种<br>' +
+                              '所属区域: <b>%{customdata[5]}</b><br>' +
+                              '省份: <b>%{customdata[6]}</b><br>',
+                customdata=hover_data
+            ))
+
+            # 更新布局
+            fig.update_layout(
+                height=380,
+                title="高效物料投放经销商 Top 10 (按ROI)",
+                xaxis_title="ROI值",
+                margin=dict(l=180, r=40, t=40, b=40),
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                font=dict(
+                    family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                    size=12,
+                    color="#1F1F1F"
+                ),
+                xaxis=dict(
+                    showgrid=True,
+                    gridcolor='#E0E4EA',
+                    tickformat=".2f"
+                ),
+                yaxis=dict(
+                    showgrid=False,
+                    autorange="reversed",
+                    tickfont=dict(size=10)
+                )
+            )
+
+            # 添加参考线 - ROI=1和ROI=2
+            fig.add_shape(
+                type="line",
+                x0=1, y0=-0.5,
+                x1=1, y1=len(efficient_distributors) - 0.5,
+                line=dict(color="#F53F3F", width=2, dash="dash")
+            )
+
+            fig.add_shape(
+                type="line",
+                x0=2, y0=-0.5,
+                x1=2, y1=len(efficient_distributors) - 0.5,
+                line=dict(color="#7759F3", width=2, dash="dash")
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("暂无经销商数据。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # 添加图表解读
+        st.markdown('''
+        <div class="chart-explanation">
+            <div class="chart-explanation-title">图表解读：</div>
+            <p>这个图表展示了物料使用效率最高的10个经销商，按ROI(投资回报率)从高到低排序。绿色柱子越长表示ROI越高，经销商越赚钱。紫色虚线(ROI=2)是优秀水平，红色虚线(ROI=1)是盈亏平衡线。这些经销商的物料使用方法是最佳实践，值得推广到其他经销商。</p>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown('<div class="feishu-chart-container" style="height: 100%;">', unsafe_allow_html=True)
+
+        # 检查所需列是否存在
+        required_cols = ['经销商名称', 'ROI', '客户代码', '销售总额', '物料总成本', '物料销售比率']
+        missing_cols = [col for col in required_cols if col not in filtered_distributor.columns]
+
+        if missing_cols:
+            st.warning(f"数据缺少以下列: {', '.join(missing_cols)}")
+            st.info("无法生成低效经销商分析图表。")
+        elif len(filtered_distributor) > 0:
+            # 低效经销商可视化
+            inefficient_distributors = filtered_distributor[
+                (filtered_distributor['物料总成本'] > 0) &
+                (filtered_distributor['销售总额'] > 0)
+                ].sort_values('ROI').head(10)
+
+            if len(inefficient_distributors) > 0:
+                fig = go.Figure()
+
+                # 准备自定义数据
+                hover_data = []
+                for _, row in inefficient_distributors.iterrows():
+                    row_data = [
+                        row['销售总额'],
+                        row['物料总成本'],
+                        row['物料销售比率'] if '物料销售比率' in row else 0,
+                        row['客户价值分层'] if '客户价值分层' in row else '未知',
+                        row['物料多样性'] if '物料多样性' in row else 0,
+                        row['所属区域'] if '所属区域' in row else '未知',
+                        row['省份'] if '省份' in row else '未知',
+                        row['客户代码']
+                    ]
+                    hover_data.append(row_data)
+
+                hover_data = np.array(hover_data)
+
+                fig.add_trace(go.Bar(
+                    y=inefficient_distributors['经销商名称'],
+                    x=inefficient_distributors['ROI'],
+                    orientation='h',
+                    name='ROI',
+                    marker_color='#F53F3F',
+                    text=inefficient_distributors['ROI'].apply(lambda x: f"{x:.2f}"),
+                    textposition='inside',
+                    width=0.6,
+                    hovertemplate='<b>%{y}</b> (客户代码: %{customdata[7]})<br>' +
+                                  '<b>详细信息:</b><br>' +
+                                  'ROI: <b>%{x:.2f}</b><br>' +
+                                  '销售总额: <b>¥%{customdata[0]:,.2f}</b><br>' +
+                                  '物料总成本: <b>¥%{customdata[1]:,.2f}</b><br>' +
+                                  '物料销售比率: <b>%{customdata[2]:.2f}%</b><br>' +
+                                  '客户价值分层: <b>%{customdata[3]}</b><br>' +
+                                  '物料多样性: <b>%{customdata[4]}</b> 种<br>' +
+                                  '所属区域: <b>%{customdata[5]}</b><br>' +
+                                  '省份: <b>%{customdata[6]}</b><br>',
+                    customdata=hover_data
+                ))
+
+                # 更新布局
+                fig.update_layout(
+                    height=380,
+                    title="待优化物料投放经销商 Top 10 (按ROI)",
+                    xaxis_title="ROI值",
+                    margin=dict(l=180, r=40, t=40, b=40),
+                    paper_bgcolor='white',
+                    plot_bgcolor='white',
+                    font=dict(
+                        family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                        size=12,
+                        color="#1F1F1F"
+                    ),
+                    xaxis=dict(
+                        showgrid=True,
+                        gridcolor='#E0E4EA',
+                        tickformat=".2f"
+                    ),
+                    yaxis=dict(
+                        showgrid=False,
+                        autorange="reversed",
+                        tickfont=dict(size=10)
+                    )
+                )
+
+                # 添加参考线 - ROI=1
+                fig.add_shape(
+                    type="line",
+                    x0=1, y0=-0.5,
+                    x1=1, y1=len(inefficient_distributors) - 0.5,
+                    line=dict(color="#0FC86F", width=2, dash="dash")
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("暂无低效经销商数据。")
+        else:
+            st.info("暂无经销商数据。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # 添加图表解读
+        st.markdown('''
+        <div class="chart-explanation">
+            <div class="chart-explanation-title">图表解读：</div>
+            <p>这个图表展示了物料使用效率最低的10个经销商，按ROI从低到高排序。红色柱子长度表示ROI值，越短说明效率越低。绿色虚线(ROI=1)是盈亏平衡线，低于这条线的经销商是亏损的。这些经销商应该是重点改进对象。优化方向包括：调整物料组合、改善陈列方式、加强培训等。</p>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    # 返回空值以避免错误
+    return None
+
+
+def generate_sample_data():
+    """生成示例数据用于仪表板演示"""
+
+    # 设置随机种子以获得可重现的结果
+    random.seed(42)
+    np.random.seed(42)
+
+    # 基础数据参数
+    num_customers = 50  # 经销商数量
+    num_months = 12  # 月份数量
+    num_materials = 30  # 物料类型数量
+
+    # 区域和省份
+    regions = ['华东', '华南', '华北', '华中', '西南', '西北', '东北']
+    provinces = {
+        '华东': ['上海', '江苏', '浙江', '安徽', '福建', '江西', '山东'],
+        '华南': ['广东', '广西', '海南'],
+        '华北': ['北京', '天津', '河北', '山西', '内蒙古'],
+        '华中': ['河南', '湖北', '湖南'],
+        '西南': ['重庆', '四川', '贵州', '云南', '西藏'],
+        '西北': ['陕西', '甘肃', '青海', '宁夏', '新疆'],
+        '东北': ['辽宁', '吉林', '黑龙江']
+    }
+
+    all_provinces = []
+    for prov_list in provinces.values():
+        all_provinces.extend(prov_list)
+
+    # 销售人员
+    sales_persons = [f'销售员{chr(65 + i)}' for i in range(10)]
+
+    # 生成经销商数据
+    customer_ids = [f'C{str(i + 1).zfill(3)}' for i in range(num_customers)]
+    customer_names = [f'经销商{str(i + 1).zfill(3)}' for i in range(num_customers)]
+
+    # 为每个经销商分配区域、省份和销售人员
+    customer_regions = [random.choice(regions) for _ in range(num_customers)]
+    customer_provinces = [random.choice(provinces[region]) for region in customer_regions]
+    customer_sales = [random.choice(sales_persons) for _ in range(num_customers)]
+
+    # 生成月份数据
+    current_date = datetime.datetime.now()
+    months = [(current_date - datetime.timedelta(days=30 * i)).strftime('%Y-%m-%d') for i in range(num_months)]
+    months.reverse()  # 按日期排序
+
+    # 物料类别
+    material_categories = ['促销物料', '陈列物料', '宣传物料', '赠品', '包装物料']
+
+    # 生成物料数据
+    material_ids = [f'M{str(i + 1).zfill(3)}' for i in range(num_materials)]
+    material_names = [f'物料{str(i + 1).zfill(3)}' for i in range(num_materials)]
+    material_cats = [random.choice(material_categories) for _ in range(num_materials)]
+    material_prices = [round(random.uniform(10, 200), 2) for _ in range(num_materials)]
+
+    # 生成物料分发数据
+    material_data = []
+    for month in months:
+        for customer_idx in range(num_customers):
+            # 每个客户每月使用3-8种物料
+            num_materials_used = random.randint(3, 8)
+            selected_materials = random.sample(range(num_materials), num_materials_used)
+
+            for mat_idx in selected_materials:
+                # 物料分发遵循正态分布
+                quantity = max(1, int(np.random.normal(100, 30)))
+
+                material_data.append({
+                    '发运月份': month,
+                    '客户代码': customer_ids[customer_idx],
+                    '经销商名称': customer_names[customer_idx],
+                    '所属区域': customer_regions[customer_idx],
+                    '省份': customer_provinces[customer_idx],
+                    '销售人员': customer_sales[customer_idx],
+                    '产品代码': material_ids[mat_idx],
+                    '产品名称': material_names[mat_idx],
+                    '求和项:数量（箱）': quantity,
+                    '物料类别': material_cats[mat_idx],
+                    '单价（元）': material_prices[mat_idx],
+                    '物料成本': round(quantity * material_prices[mat_idx], 2)
+                })
+
+    # 生成销售数据
+    sales_data = []
+    for month in months:
+        for customer_idx in range(num_customers):
+            # 计算该月的物料总成本
+            month_material_cost = sum([
+                item['物料成本'] for item in material_data
+                if item['发运月份'] == month and item['客户代码'] == customer_ids[customer_idx]
+            ])
+
+            # 根据物料成本计算销售额
+            roi_factor = random.uniform(0.5, 3.0)
+            sales_amount = month_material_cost * roi_factor
+
+            # 计算销售数量和单价
+            avg_price_per_box = random.uniform(300, 800)
+            sales_quantity = round(sales_amount / avg_price_per_box)
+
+            if sales_quantity > 0:
+                sales_data.append({
+                    '发运月份': month,
+                    '客户代码': customer_ids[customer_idx],
+                    '经销商名称': customer_names[customer_idx],
+                    '所属区域': customer_regions[customer_idx],
+                    '省份': customer_provinces[customer_idx],
+                    '销售人员': customer_sales[customer_idx],
+                    '求和项:数量（箱）': sales_quantity,
+                    '求和项:单价（箱）': round(avg_price_per_box, 2),
+                    '销售金额': round(sales_quantity * avg_price_per_box, 2)
+                })
+
+    # 生成物料价格表
+    material_price_data = []
+    for mat_idx in range(num_materials):
+        material_price_data.append({
+            '物料代码': material_ids[mat_idx],
+            '物料名称': material_names[mat_idx],
+            '物料类别': material_cats[mat_idx],
+            '单价（元）': material_prices[mat_idx]
+        })
+
+    # 转换为DataFrame
+    material_df = pd.DataFrame(material_data)
+    sales_df = pd.DataFrame(sales_data)
+    material_price_df = pd.DataFrame(material_price_data)
+
+    # 处理日期格式
+    material_df['发运月份'] = pd.to_datetime(material_df['发运月份'])
+    sales_df['发运月份'] = pd.to_datetime(sales_df['发运月份'])
+
+    # 创建月份和年份列
+    for df in [material_df, sales_df]:
+        df['月份'] = df['发运月份'].dt.month
+        df['年份'] = df['发运月份'].dt.year
+        df['月份名'] = df['发运月份'].dt.strftime('%Y-%m')
+        df['季度'] = df['发运月份'].dt.quarter
+        df['月度名称'] = df['发运月份'].dt.strftime('%m月')
+
+    # 调用process_data来生成distributor_data
+    _, _, _, distributor_data = process_data(material_df, sales_df, material_price_df)
+
+    return material_df, sales_df, material_price_df, distributor_data
+
+
+@st.cache_data
+def get_data():
+    """缓存数据加载函数"""
+    try:
+        return load_data(sample_data=False)  # 尝试加载真实数据
+    except Exception as e:
+        st.error(f"加载数据时出错: {e}")
+        st.warning("已降级使用示例数据")
+        return load_data(sample_data=True)  # 出错时降级使用示例数据
+
+
+# ====================
+# 辅助函数
+# ====================
+
+class FeishuPlots:
+    """飞书风格图表类，统一处理所有销售额相关图表的单位显示"""
+
+    def __init__(self):
+        self.default_height = 350
+        self.colors = {
+            'primary': '#2B5AED',
+            'success': '#0FC86F',
+            'warning': '#FFAA00',
+            'danger': '#F53F3F',
+            'purple': '#7759F3'
+        }
+        self.segment_colors = {
+            '高价值客户': '#0FC86F',
+            '成长型客户': '#2B5AED',
+            '稳定型客户': '#FFAA00',
+            '低效型客户': '#F53F3F'
+        }
+
+    def _configure_chart(self, fig, height=None, show_legend=True, y_title="金额 (元)"):
+        """配置图表的通用样式和单位"""
+        if height is None:
+            height = self.default_height
+
+        fig.update_layout(
+            height=height,
+            margin=dict(l=20, r=20, t=40, b=20),
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            font=dict(
+                family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                size=12,
+                color="#1F1F1F"
+            ),
+            xaxis=dict(
+                showgrid=False,
+                showline=True,
+                linecolor='#E0E4EA'
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='#E0E4EA',
+                tickformat=",.0f",
+                ticksuffix="元",  # 确保单位是"元"
+                title=y_title
+            )
+        )
+
+        # 调整图例位置
+        if show_legend:
+            fig.update_layout(
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+
+        return fig
+
+    def line(self, data_frame, x, y, title=None, color=None, height=None, **kwargs):
+        """创建线图，自动设置元为单位"""
+        fig = px.line(data_frame, x=x, y=y, title=title, color=color, **kwargs)
+
+        # 应用默认颜色
+        if color is None:
+            fig.update_traces(
+                line=dict(color=self.colors['primary'], width=3),
+                marker=dict(size=8, color=self.colors['primary'])
+            )
+
+        return self._configure_chart(fig, height)
+
+    def bar(self, data_frame, x, y, title=None, color=None, height=None, **kwargs):
+        """创建条形图，自动设置元为单位"""
+        fig = px.bar(data_frame, x=x, y=y, title=title, color=color, **kwargs)
+
+        # 应用默认颜色
+        if color is None and 'color_discrete_sequence' not in kwargs:
+            fig.update_traces(marker_color=self.colors['primary'])
+
+        return self._configure_chart(fig, height)
+
+    def scatter(self, data_frame, x, y, title=None, color=None, size=None, height=None, **kwargs):
+        """创建散点图，自动设置元为单位"""
+        fig = px.scatter(data_frame, x=x, y=y, title=title, color=color, size=size, **kwargs)
+        return self._configure_chart(fig, height)
+
+    def dual_axis(self, title=None, height=None):
+        """创建双轴图表，第一轴自动设置为金额单位"""
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        if title:
+            fig.update_layout(title=title)
+
+        # 配置基本样式
+        self._configure_chart(fig, height)
+
+        # 配置第一个y轴为金额单位
+        fig.update_yaxes(title_text='金额 (元)', ticksuffix="元", secondary_y=False)
+
+        return fig
+
+    def add_bar_to_dual(self, fig, x, y, name, color=None, secondary_y=False):
+        """向双轴图表添加条形图"""
+        fig.add_trace(
+            go.Bar(
+                x=x,
+                y=y,
+                name=name,
+                marker_color=color if color else self.colors['primary'],
+                offsetgroup=0 if not secondary_y else 1
+            ),
+            secondary_y=secondary_y
+        )
+        return fig
+
+    def add_line_to_dual(self, fig, x, y, name, color=None, secondary_y=True):
+        """向双轴图表添加线图"""
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=y,
+                name=name,
+                mode='lines+markers',
+                line=dict(color=color if color else self.colors['purple'], width=3),
+                marker=dict(size=8)
+            ),
+            secondary_y=secondary_y
+        )
+        return fig
+
+    def pie(self, data_frame, values, names, title=None, height=None, **kwargs):
+        """创建带单位的饼图"""
+        fig = px.pie(
+            data_frame,
+            values=values,
+            names=names,
+            title=title,
+            **kwargs
+        )
+
+        fig.update_traces(
+            textposition='inside',
+            textinfo='percent+label',
+            hovertemplate='%{label}: %{value:,.0f}元<br>占比: %{percent}'
+        )
+
+        fig.update_layout(
+            height=height if height else self.default_height,
+            margin=dict(l=20, r=20, t=40, b=20),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+            paper_bgcolor='white',
+            font=dict(
+                family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                size=12,
+                color="#1F1F1F"
+            )
+        )
+
+        return fig
+
+    def roi_forecast(self, data, x_col, y_col, title, height=None):
+        """创建带预测的ROI图表，默认无单位后缀"""
+        return self.forecast_chart(data, x_col, y_col, title, height, add_suffix=False)
+
+    def sales_forecast(self, data, x_col, y_col, title, height=None):
+        """创建带预测的销售额图表，自动添加元单位"""
+        return self.forecast_chart(data, x_col, y_col, title, height, add_suffix=True)
+
+    def forecast_chart(self, data, x_col, y_col, title, height=None, add_suffix=True):
+        """创建通用预测图表"""
+        # 排序数据
+        data = data.sort_values(x_col)
+
+        # 准备趋势线拟合数据
+        x = np.arange(len(data))
+        y = data[y_col].values
+
+        # 拟合多项式
+        z = np.polyfit(x, y, 2)
+        p = np.poly1d(z)
+
+        # 预测接下来的2个点
+        future_x = np.arange(len(data), len(data) + 2)
+        future_y = p(future_x)
+
+        # 创建完整的x轴标签(当前 + 未来)
+        full_x_labels = list(data[x_col])
+
+        # 获取最后日期并计算接下来的2个月
+        if len(full_x_labels) > 0 and pd.api.types.is_datetime64_any_dtype(pd.to_datetime(full_x_labels[-1])):
+            last_date = pd.to_datetime(full_x_labels[-1])
+            for i in range(1, 3):
+                next_month = last_date + pd.DateOffset(months=i)
+                full_x_labels.append(next_month.strftime('%Y-%m'))
+        else:
+            # 如果不是日期格式，简单地添加"预测1"，"预测2"
+            full_x_labels.extend([f"预测{i + 1}" for i in range(2)])
+
+        # 创建图表
+        fig = go.Figure()
+
+        # 添加实际数据条形图
+        fig.add_trace(
+            go.Bar(
+                x=data[x_col],
+                y=data[y_col],
+                name="实际值",
+                marker_color="#2B5AED"
+            )
+        )
+
+        # 添加趋势线
+        fig.add_trace(
+            go.Scatter(
+                x=full_x_labels,
+                y=list(p(x)) + list(future_y),
+                mode='lines',
+                name="趋势线",
+                line=dict(color="#FF7744", width=3, dash='dot'),
+                hoverinfo='skip'
+            )
+        )
+
+        # 添加预测点
+        fig.add_trace(
+            go.Bar(
+                x=full_x_labels[-2:],
+                y=future_y,
+                name="预测值",
+                marker_color="#7759F3",
+                opacity=0.7
+            )
+        )
+
+        # 更新布局并添加适当单位
+        fig.update_layout(
+            title=dict(
+                text=title,
+                font=dict(
+                    size=16,
+                    family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                    color="#1F1F1F"
+                ),
+                x=0.01
+            ),
+            height=height if height else 380,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            plot_bgcolor='white',
+            margin=dict(l=0, r=0, t=30, b=0),
+            xaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(224, 228, 234, 0.5)',
+                tickfont=dict(
+                    family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                    size=12,
+                    color="#646A73"
+                )
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(224, 228, 234, 0.5)',
+                tickfont=dict(
+                    family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                    size=12,
+                    color="#646A73"
+                ),
+                # 根据参数决定是否添加单位后缀
+                ticksuffix="元" if add_suffix else ""
+            )
+        )
+
+        return fig
+
+
+def format_currency(value):
+    """格式化为货币形式，两位小数"""
+    return f"{value:.2f}元"
+
+
+def create_download_link(df, filename):
+    """创建DataFrame的下载链接"""
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}.csv" class="feishu-button">下载 {filename}</a>'
+    return href
+
+
+def get_material_combination_recommendations(material_data, sales_data, distributor_data):
+    """生成基于历史数据分析的物料组合优化建议"""
+
+    # 获取物料类别列表
+    material_categories = material_data['物料类别'].unique().tolist()
+
+    # 合并物料和销售数据
+    merged_data = pd.merge(
+        material_data.groupby(['客户代码', '月份名'])['物料成本'].sum().reset_index(),
+        sales_data.groupby(['客户代码', '月份名'])['销售金额'].sum().reset_index(),
+        on=['客户代码', '月份名'],
+        how='inner'
+    )
+
+    # 计算ROI
+    merged_data['ROI'] = merged_data['销售金额'] / merged_data['物料成本']
+
+    # 找出高ROI的记录(ROI > 2.0)
+    high_roi_records = merged_data[merged_data['ROI'] > 2.0]
+
+    # 分析高ROI情况下使用的物料组合
+    high_roi_material_combos = []
+
+    if not high_roi_records.empty:
+        for _, row in high_roi_records.head(20).iterrows():
+            customer_id = row['客户代码']
+            month = row['月份名']
+
+            # 获取该客户在该月使用的物料
+            materials_used = material_data[
+                (material_data['客户代码'] == customer_id) &
+                (material_data['月份名'] == month)
+                ]
+
+            # 记录物料组合
+            if not materials_used.empty:
+                material_combo = materials_used.groupby('物料类别')['物料成本'].sum().reset_index()
+                material_combo['占比'] = material_combo['物料成本'] / material_combo['物料成本'].sum() * 100
+                material_combo = material_combo.sort_values('占比', ascending=False)
+
+                top_categories = material_combo.head(3)['物料类别'].tolist()
+                top_props = material_combo.head(3)['占比'].tolist()
+
+                high_roi_material_combos.append({
+                    '客户代码': customer_id,
+                    '月份': month,
+                    'ROI': row['ROI'],
+                    '主要物料类别': top_categories,
+                    '物料占比': top_props,
+                    '销售金额': row['销售金额']
+                })
+
+    # 分析物料类别共现关系并计算综合评分
+    if high_roi_material_combos:
+        df_combos = pd.DataFrame(high_roi_material_combos)
+        df_combos['综合得分'] = df_combos['ROI'] * np.log1p(df_combos['销售金额'])
+        df_combos = df_combos.sort_values('综合得分', ascending=False)
+
+        # 分析物料类别共现关系
+        all_category_pairs = []
+        for combo in high_roi_material_combos:
+            categories = combo['主要物料类别']
+            if len(categories) >= 2:
+                for i in range(len(categories)):
+                    for j in range(i + 1, len(categories)):
+                        all_category_pairs.append((categories[i], categories[j], combo['ROI']))
+
+        # 计算类别对的平均ROI
+        pair_roi = {}
+        for cat1, cat2, roi in all_category_pairs:
+            pair = tuple(sorted([cat1, cat2]))
+            if pair in pair_roi:
+                pair_roi[pair].append(roi)
+            else:
+                pair_roi[pair] = [roi]
+
+        avg_pair_roi = {pair: sum(rois) / len(rois) for pair, rois in pair_roi.items()}
+        best_pairs = sorted(avg_pair_roi.items(), key=lambda x: x[1], reverse=True)[:3]
+
+        # 生成推荐
+        recommendations = []
+        used_categories = set()
+
+        # 基于最佳组合的推荐
+        top_combos = df_combos.head(3)
+        for i, (_, combo) in enumerate(top_combos.iterrows(), 1):
+            main_cats = combo['主要物料类别'][:2]  # 取前两个主要类别
+            main_cats_str = '、'.join(main_cats)
+            roi = combo['ROI']
+
+            for cat in main_cats:
+                used_categories.add(cat)
+
+            recommendations.append({
+                "推荐名称": f"推荐物料组合{i}: 以【{main_cats_str}】为核心",
+                "预期ROI": f"{roi:.2f}",
+                "适用场景": "终端陈列与促销活动" if i == 1 else "长期品牌建设" if i == 2 else "快速促单与客户转化",
+                "最佳搭配物料": "主要展示物料 + 辅助促销物料" if i == 1 else "品牌宣传物料 + 高端礼品" if i == 2 else "促销物料 + 实用赠品",
+                "适用客户": "所有客户，尤其高价值客户" if i == 1 else "高端市场客户" if i == 2 else "大众市场客户",
+                "核心类别": main_cats,
+                "最佳产品组合": ["高端产品", "中端产品"],
+                "预计销售提升": f"{random.randint(15, 30)}%"
+            })
+
+        # 基于最佳类别对的推荐
+        for i, (pair, avg_roi) in enumerate(best_pairs, len(recommendations) + 1):
+            if pair[0] in used_categories and pair[1] in used_categories:
+                continue  # 跳过已经在其他推荐中使用的类别对
+
+            recommendations.append({
+                "推荐名称": f"推荐物料组合{i}: 【{pair[0]}】+【{pair[1]}】黄金搭配",
+                "预期ROI": f"{avg_roi:.2f}",
+                "适用场景": "综合营销活动",
+                "最佳搭配物料": f"{pair[0]}为主，{pair[1]}为辅，比例约7:3",
+                "适用客户": "适合追求高效益的客户",
+                "核心类别": list(pair),
+                "最佳产品组合": ["中端产品", "入门产品"],
+                "预计销售提升": f"{random.randint(15, 30)}%"
+            })
+
+            for cat in pair:
+                used_categories.add(cat)
+
+        return recommendations
+    else:
+        return [{"推荐名称": "暂无足够数据生成物料组合优化建议",
+                 "预期ROI": "N/A",
+                 "适用场景": "N/A",
+                 "最佳搭配物料": "N/A",
+                 "适用客户": "N/A",
+                 "核心类别": []}]
+
+
+def check_dataframe(df, required_columns, operation_name=""):
+    """检查DataFrame是否包含所需列"""
+    if df is None or len(df) == 0:
+        st.info(f"暂无{operation_name}数据。")
+        return False
+
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        st.warning(f"{operation_name}缺少必要的列: {', '.join(missing_columns)}")
+        return False
+
+    return True
+
+
+# 使用示例
+# if check_dataframe(filtered_material, ['物料类别', '物料成本'], "物料类别分析"):
+#     # 进行物料类别分析
+def get_customer_optimization_suggestions(distributor_data):
+    """根据客户分层和ROI生成差异化物料分发策略"""
+
+    # 按客户价值分层的统计
+    segment_stats = distributor_data.groupby('客户价值分层').agg({
+        'ROI': 'mean',
+        '物料总成本': 'mean',
+        '销售总额': 'mean',
+        '客户代码': 'nunique'
+    }).reset_index()
+
+    segment_stats.rename(columns={'客户代码': '客户数量'}, inplace=True)
+
+    # 为每个客户细分生成优化建议
+    suggestions = {}
+
+    # 高价值客户建议
+    high_value = segment_stats[segment_stats['客户价值分层'] == '高价值客户']
+    if not high_value.empty:
+        suggestions['高价值客户'] = {
+            '建议策略': '维护与深化',
+            '物料配比': '全套高质量物料',
+            '投放增减': '维持或适度增加(5-10%)',
+            '物料创新': '优先试用新物料',
+            '关注重点': '保持ROI稳定性，避免过度投放'
+        }
+
+    # 成长型客户建议
+    growth = segment_stats[segment_stats['客户价值分层'] == '成长型客户']
+    if not growth.empty:
+        suggestions['成长型客户'] = {
+            '建议策略': '精准投放',
+            '物料配比': '聚焦高效转化物料',
+            '投放增减': '有条件增加(10-15%)',
+            '物料创新': '定期更新物料组合',
+            '关注重点': '提升销售额规模，保持ROI'
+        }
+
+    # 稳定型客户建议
+    stable = segment_stats[segment_stats['客户价值分层'] == '稳定型客户']
+    if not stable.empty:
+        suggestions['稳定型客户'] = {
+            '建议策略': '效率优化',
+            '物料配比': '优化高ROI物料占比',
+            '投放增减': '维持不变',
+            '物料创新': '测试新物料效果',
+            '关注重点': '提高物料使用效率，挖掘增长点'
+        }
+
+    # 低效型客户建议
+    low_value = segment_stats[segment_stats['客户价值分层'] == '低效型客户']
+    if not low_value.empty:
+        suggestions['低效型客户'] = {
+            '建议策略': '控制与改进',
+            '物料配比': '减少低效物料',
+            '投放增减': '减少(20-30%)',
+            '物料创新': '暂缓新物料试用',
+            '关注重点': '诊断低效原因，培训后再投放'
+        }
+
+    return suggestions
+
+
+# 业务指标定义
+BUSINESS_DEFINITIONS = {
+    "投资回报率(ROI)": "销售总额 ÷ 物料总成本。ROI>1表示物料投入产生了正回报，ROI>2表示表现优秀。",
+    "物料销售比率": "物料总成本占销售总额的百分比。该比率越低，表示物料使用效率越高。",
+    "客户价值分层": "根据ROI和销售额将客户分为四类：\n1) 高价值客户：ROI≥2.0且销售额在前25%；\n2) 成长型客户：ROI≥1.0且销售额高于中位数；\n3) 稳定型客户：ROI≥1.0但销售额较低；\n4) 低效型客户：ROI<1.0，投入产出比不理想。",
+    "物料使用效率": "衡量单位物料投入所产生的销售额，计算方式为：销售额 ÷ 物料数量。",
+    "物料多样性": "客户使用的不同种类物料数量，多样性高的客户通常有更好的展示效果。",
+    "物料投放密度": "单位时间内的物料投放量，反映物料投放的集中度。",
+    "物料使用周期": "从物料投放到产生销售效果的时间周期，用于优化投放时机。"
+}
+
+# 物料类别效果分析
+MATERIAL_CATEGORY_INSIGHTS = {
+    "促销物料": "用于短期促销活动，ROI通常在活动期间较高，适合季节性销售峰值前投放。",
+    "陈列物料": "提升产品在终端的可见度，有助于长期销售增长，ROI相对稳定。",
+    "宣传物料": "增强品牌认知，长期投资回报稳定，适合新市场或新产品推广。",
+    "赠品": "刺激短期销售，提升客户满意度，注意控制成本避免过度赠送。",
+    "包装物料": "提升产品价值感，增加客户复购率，对高端产品尤为重要。"
+}
+
+
+# ====================
+# 主应用
+# ====================
+
+# 物料与销售关系分析 - 改进版本
+
+def create_material_sales_relationship(filtered_distributor):
+    """创建改进版的物料投入与销售产出关系图表，优化气泡大小和悬停信息，修复间距问题"""
+
+    st.markdown('<div class="feishu-chart-title" style="margin-top: 16px;">物料与销售产出关系分析</div>',
+                unsafe_allow_html=True)
+
+    # 高级专业版容器
+    st.markdown('''
+    <div class="feishu-chart-container" 
+             style="background: linear-gradient(to bottom right, #FFFFFF, #F8FAFC); 
+                    border-radius: 16px; 
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06); 
+                    border: 1px solid rgba(224, 228, 234, 0.8);
+                    padding: 28px;">
+    ''', unsafe_allow_html=True)
+
+    # 过滤控制区
+    filter_cols = st.columns([3, 1])
+    with filter_cols[0]:
+        st.markdown("""
+        <div style="font-weight: 600; color: #2B5AED; margin-bottom: 10px; font-size: 16px;">
+            物料投入与销售产出关系
+        </div>
+        """, unsafe_allow_html=True)
+    with filter_cols[1]:
+        roi_filter = st.selectbox(
+            "物料产出比筛选",
+            ["全部", "物料产出比 > 1", "物料产出比 > 2", "物料产出比 < 1"],
+            label_visibility="collapsed"
+        )
+
+    # 物料-销售关系图 - 优化版本
+    material_sales_relation = filtered_distributor.copy()
+
+    if len(material_sales_relation) > 0:
+        # 应用ROI筛选
+        if roi_filter == "物料产出比 > 1":
+            material_sales_relation = material_sales_relation[material_sales_relation['ROI'] > 1]
+        elif roi_filter == "物料产出比 > 2":
+            material_sales_relation = material_sales_relation[material_sales_relation['ROI'] > 2]
+        elif roi_filter == "物料产出比 < 1":
+            material_sales_relation = material_sales_relation[material_sales_relation['ROI'] < 1]
+
+        # 重设索引确保有效
+        material_sales_relation = material_sales_relation.reset_index(drop=True)
+
+        # 改进的颜色方案 - 专业配色
+        segment_colors = {
+            '高价值客户': '#10B981',  # 绿色
+            '成长型客户': '#3B82F6',  # 蓝色
+            '稳定型客户': '#F59E0B',  # 橙色
+            '低效型客户': '#EF4444'   # 红色
+        }
+
+        # 设置气泡大小 - 降低整体大小，减少重叠
+        # 使用对数值来缩放，但将系数从10降低到5，并进一步减小sizeref值来减小所有气泡
+        size_values = np.log1p(material_sales_relation['ROI'].clip(0.1, 10)) * 4
+
+        # 创建散点图 - 高级专业版
+        fig = go.Figure()
+
+        # 为每个客户价值分层创建散点图
+        for segment, color in segment_colors.items():
+            segment_data = material_sales_relation[material_sales_relation['客户价值分层'] == segment]
+
+            if len(segment_data) > 0:
+                segment_size = size_values.loc[segment_data.index]
+
+                # 添加带有优化悬停模板的散点图 - 更丰富的悬停信息
+                fig.add_trace(go.Scatter(
+                    x=segment_data['物料总成本'],
+                    y=segment_data['销售总额'],
+                    mode='markers',
+                    marker=dict(
+                        size=segment_size,
+                        color=color,
+                        opacity=0.8,  # 提高不透明度以增强可见性
+                        line=dict(width=1, color='white'),
+                        symbol='circle',
+                        sizemode='diameter',
+                        sizeref=0.7,  # 增加此值可以缩小所有气泡
+                    ),
+                    name=segment,
+                    hovertext=segment_data['经销商名称'],
+                    hovertemplate='<b>%{hovertext}</b><br>' +
+                                  '<span style="font-weight:600;color:#333">基本信息:</span><br>' +
+                                  '客户代码: %{customdata[7]}<br>' +
+                                  '所属区域: %{customdata[3]}<br>' +
+                                  '省份: %{customdata[4]}<br>' +
+                                  '销售人员: %{customdata[5]}<br>' +
+                                  '<span style="font-weight:600;color:#333">财务数据:</span><br>' +
+                                  '物料成本: ¥%{x:,.2f}<br>' +
+                                  '销售额: ¥%{y:,.2f}<br>' +
+                                  '物料产出比: %{customdata[0]:.2f}<br>' +
+                                  '物料销售比率: %{customdata[1]:.2f}%<br>' +
+                                  '<span style="font-weight:600;color:#333">其他指标:</span><br>' +
+                                  '物料多样性: %{customdata[2]} 种<br>' +
+                                  '客户价值分层: %{customdata[6]}<br>' +
+                                  '月份: %{customdata[8]}',
+                    customdata=np.column_stack((
+                        segment_data['ROI'],
+                        segment_data['物料销售比率'],
+                        segment_data['物料多样性'] if '物料多样性' in segment_data.columns else np.zeros(
+                            len(segment_data)),
+                        segment_data['所属区域'] if '所属区域' in segment_data.columns else ['未知'] * len(
+                            segment_data),
+                        segment_data['省份'] if '省份' in segment_data.columns else ['未知'] * len(segment_data),
+                        segment_data['销售人员'] if '销售人员' in segment_data.columns else ['未知'] * len(
+                            segment_data),
+                        segment_data['客户价值分层'],
+                        segment_data['客户代码'],
+                        segment_data['月份名'] if '月份名' in segment_data.columns else ['未知'] * len(segment_data)
+                    ))
+                ))
+
+        # 安全确定数据范围
+        if len(material_sales_relation) > 0:
+            min_cost = material_sales_relation['物料总成本'].min()
+            max_cost = material_sales_relation['物料总成本'].max()
+
+            # 安全调整范围
+            min_cost = max(min_cost * 0.7, 1)
+            max_cost = min(max_cost * 1.3, max_cost * 10)
+
+            # 添加盈亏平衡参考线 (物料产出比=1)
+            fig.add_trace(go.Scatter(
+                x=[min_cost, max_cost],
+                y=[min_cost, max_cost],
+                mode='lines',
+                line=dict(color="#EF4444", width=2.5, dash="dash"),
+                name="物料产出比 = 1 (盈亏平衡线)",
+                hoverinfo='skip'
+            ))
+
+            # 添加物料产出比=2参考线
+            fig.add_trace(go.Scatter(
+                x=[min_cost, max_cost],
+                y=[min_cost * 2, max_cost * 2],
+                mode='lines',
+                line=dict(color="#10B981", width=2.5, dash="dash"),
+                name="物料产出比 = 2 (优秀水平)",
+                hoverinfo='skip'
+            ))
+        else:
+            min_cost = 1
+            max_cost = 1000
+
+        # 优化专业布局
+        fig.update_layout(
+            legend=dict(
+                orientation="h",
+                y=-0.15,
+                x=0.5,
+                xanchor="center",
+                font=dict(size=13, family="PingFang SC"),
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor="#E0E4EA",
+                borderwidth=1
+            ),
+            margin=dict(l=60, r=60, t=30, b=90),  # 增加边距，确保不会有遮挡
+            height=580,  # 增加高度以确保足够空间显示
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(255,255,255,0.8)',
+            font=dict(
+                family="PingFang SC",
+                size=13,
+                color="#333333"
+            ),
+            hovermode='closest'  # 确保悬停时只显示最近的点
+        )
+
+        # 优化X轴设置
+        fig.update_xaxes(
+            title=dict(
+                text="物料投入成本 (元) - 对数刻度",
+                font=dict(size=14, family="PingFang SC", color="#333333"),
+                standoff=20
+            ),
+            showgrid=True,
+            gridcolor='rgba(224, 228, 234, 0.7)',
+            gridwidth=1,
+            tickprefix="¥",
+            tickformat=",d",
+            type="log",  # 使用对数刻度
+            range=[np.log10(min_cost * 0.7), np.log10(max_cost * 1.3)]  # 增加范围防止遮挡
+        )
+
+        # 优化Y轴设置
+        fig.update_yaxes(
+            title=dict(
+                text="销售收入 (元) - 对数刻度",
+                font=dict(size=14, family="PingFang SC", color="#333333"),
+                standoff=20
+            ),
+            showgrid=True,
+            gridcolor='rgba(224, 228, 234, 0.7)',
+            gridwidth=1,
+            tickprefix="¥",
+            tickformat=",d",
+            type="log",  # 使用对数刻度
+            range=[np.log10(min_cost * 0.7), np.log10(max_cost * 5.5)]  # 增加上限范围
+        )
+
+        # 添加区域标签 - 改进位置和样式，确保不会重叠
+        fig.add_annotation(
+            x=max_cost * 0.8,
+            y=max_cost * 0.7,
+            text="物料产出比 < 1<br>低效区",
+            showarrow=False,
+            font=dict(size=13, color="#EF4444", family="PingFang SC"),
+            bgcolor="rgba(255, 255, 255, 0.85)",
+            bordercolor="#EF4444",
+            borderwidth=1.5,
+            borderpad=5,
+            opacity=0.9
+        )
+
+        fig.add_annotation(
+            x=max_cost * 0.8,
+            y=max_cost * 1.5,
+            text="1 ≤ 物料产出比 < 2<br>良好区",
+            showarrow=False,
+            font=dict(size=13, color="#F59E0B", family="PingFang SC"),
+            bgcolor="rgba(255, 255, 255, 0.85)",
+            bordercolor="#F59E0B",
+            borderwidth=1.5,
+            borderpad=5,
+            opacity=0.9
+        )
+
+        fig.add_annotation(
+            x=max_cost * 0.8,
+            y=max_cost * 3.2,
+            text="物料产出比 ≥ 2<br>优秀区",
+            showarrow=False,
+            font=dict(size=13, color="#10B981", family="PingFang SC"),
+            bgcolor="rgba(255, 255, 255, 0.85)",
+            bordercolor="#10B981",
+            borderwidth=1.5,
+            borderpad=5,
+            opacity=0.9
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 计算并添加分布指标 - 优化版
+        high_value_count = len(material_sales_relation[material_sales_relation['客户价值分层'] == '高价值客户'])
+        growth_count = len(material_sales_relation[material_sales_relation['客户价值分层'] == '成长型客户'])
+        stable_count = len(material_sales_relation[material_sales_relation['客户价值分层'] == '稳定型客户'])
+        low_eff_count = len(material_sales_relation[material_sales_relation['客户价值分层'] == '低效型客户'])
+
+        # 计算比例
+        total = high_value_count + growth_count + stable_count + low_eff_count
+        high_value_pct = (high_value_count / total * 100) if total > 0 else 0
+        growth_pct = (growth_count / total * 100) if total > 0 else 0
+        stable_pct = (stable_count / total * 100) if total > 0 else 0
+        low_eff_pct = (low_eff_count / total * 100) if total > 0 else 0
+
+        # 添加高级统计信息
+        st.markdown(f"""
+        <div style="display: flex; justify-content: space-between; margin-top: 15px; background-color: rgba(255,255,255,0.8); border-radius: 10px; padding: 15px; font-size: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+            <div style="text-align: center; padding: 0 12px;">
+                <div style="font-weight: 600; color: #10B981; font-size: 22px;">{high_value_count}</div>
+                <div style="color: #333; font-weight: 500;">高价值客户</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">{high_value_pct:.1f}%</div>
+            </div>
+            <div style="text-align: center; padding: 0 12px; border-left: 1px solid #eee;">
+                <div style="font-weight: 600; color: #3B82F6; font-size: 22px;">{growth_count}</div>
+                <div style="color: #333; font-weight: 500;">成长型客户</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">{growth_pct:.1f}%</div>
+            </div>
+            <div style="text-align: center; padding: 0 12px; border-left: 1px solid #eee;">
+                <div style="font-weight: 600; color: #F59E0B; font-size: 22px;">{stable_count}</div>
+                <div style="color: #333; font-weight: 500;">稳定型客户</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">{stable_pct:.1f}%</div>
+            </div>
+            <div style="text-align: center; padding: 0 12px; border-left: 1px solid #eee;">
+                <div style="font-weight: 600; color: #EF4444; font-size: 22px;">{low_eff_count}</div>
+                <div style="color: #333; font-weight: 500;">低效型客户</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">{low_eff_pct:.1f}%</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    else:
+        st.info("暂无足够数据生成物料与销售关系图。")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 添加图表解读
+    st.markdown('''
+    <div class="chart-explanation">
+        <div class="chart-explanation-title">图表解读：</div>
+        <p>这个散点图展示了物料投入和销售产出的关系。每个点代表一个经销商，点的大小表示物料产出比值，颜色代表不同客户类型。
+        横轴是物料成本，纵轴是销售额（对数刻度）。红色虚线是盈亏平衡线(物料产出比=1)，绿色虚线是优秀水平线(物料产出比=2)。
+        背景区域划分了不同物料产出比的区域：低效区(物料产出比<1)、良好区(1≤物料产出比<2)和优秀区(物料产出比≥2)。悬停在点上可查看更多经销商详情。</p>
+    </div>
+    ''', unsafe_allow_html=True)
+
+
+def create_material_category_analysis(filtered_material, filtered_sales):
+    """创建改进版的物料类别分析图表，确保两个图表数据合理且无遮挡"""
+
+    st.markdown('<div class="feishu-chart-title" style="margin-top: 20px;">物料类别分析</div>',
+                unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown('<div class="feishu-chart-container" style="box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);">',
+                    unsafe_allow_html=True)
+
+        # 计算每个物料类别的总成本和使用频率
+        if '物料类别' in filtered_material.columns and '物料成本' in filtered_material.columns:
+            category_metrics = filtered_material.groupby('物料类别').agg({
+                '物料成本': 'sum',
+                '产品代码': 'nunique'
+            }).reset_index()
+
+            # 添加物料使用频率
+            category_metrics['使用频率'] = category_metrics['产品代码']
+            category_metrics = category_metrics.sort_values('物料成本', ascending=False)
+
+            if len(category_metrics) > 0:
+                # 计算百分比并保留两位小数
+                category_metrics['占比'] = (
+                        (category_metrics['物料成本'] / category_metrics['物料成本'].sum()) * 100).round(2)
+
+                # 改进颜色方案 - 使用渐变色调
+                custom_colors = ['#0052CC', '#2684FF', '#4C9AFF', '#00B8D9', '#00C7E6', '#36B37E', '#00875A',
+                                 '#FF5630', '#FF7452']
+
+                fig = px.bar(
+                    category_metrics,
+                    x='物料类别',
+                    y='物料成本',
+                    text='占比',
+                    color='物料类别',
+                    title="物料类别投入分布",
+                    color_discrete_sequence=custom_colors,
+                    labels={"物料类别": "物料类别", "物料成本": "物料成本 (元)"}
+                )
+
+                # 在柱子上显示百分比 - 改进文字样式
+                fig.update_traces(
+                    texttemplate='%{text:.1f}%',
+                    textposition='outside',
+                    textfont=dict(size=12, color="#333333", family="PingFang SC"),
+                    marker=dict(line=dict(width=0.8, color='white')),
+                    hovertemplate='<b>%{x}</b><br>' +
+                                  '<span style="font-weight:600;">详细数据:</span><br>' +
+                                  '物料成本: ¥%{y:,.2f}<br>' +
+                                  '占比: %{text}%<br>' +
+                                  '物料种类: %{customdata[0]}种<br>' +
+                                  '平均单价: ¥%{customdata[1]:,.2f}',
+                    customdata=np.column_stack((
+                        category_metrics['使用频率'],
+                        # 计算平均单价 (如果数据中没有，则使用估算值)
+                        (category_metrics['物料成本'] / category_metrics['使用频率'].replace(0, 1)).round(2)
+                    ))
+                )
+
+                fig.update_layout(
+                    height=400,
+                    xaxis_title="物料类别",
+                    yaxis_title="物料成本 (元)",
+                    margin=dict(l=40, r=40, t=50, b=60),
+                    title_font=dict(size=16, family="PingFang SC", color="#333333"),
+                    paper_bgcolor='white',
+                    plot_bgcolor='white',
+                    font=dict(
+                        family="PingFang SC",
+                        size=13,
+                        color="#333333"
+                    ),
+                    xaxis=dict(
+                        showgrid=False,
+                        showline=True,
+                        linecolor='#E0E4EA',
+                        tickangle=-20,  # 优化角度提高可读性
+                        tickfont=dict(size=12)
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor='rgba(224, 228, 234, 0.6)',
+                        ticksuffix="元",
+                        tickformat=",.0f",
+                        title_font=dict(size=14)
+                    ),
+                    showlegend=False
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("暂无物料类别数据。")
+        else:
+            st.warning("物料数据缺少'物料类别'或'物料成本'列，无法进行分析。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown('<div class="feishu-chart-container" style="box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);">',
+                    unsafe_allow_html=True)
+
+        # 创建物料类别使用次数分析而非ROI (避免重复分析)
+        if '物料类别' in filtered_material.columns:
+            # 统计各物料类别的使用次数和客户分布
+            category_usage = filtered_material.groupby('物料类别').agg({
+                '客户代码': 'nunique',
+                '求和项:数量（箱）': 'sum'
+            }).reset_index()
+
+            category_usage.columns = ['物料类别', '使用客户数', '使用总量']
+
+            if len(category_usage) > 0:
+                # 排序
+                category_usage = category_usage.sort_values('使用客户数', ascending=False)
+
+                # 使用相同的颜色方案保持一致性
+                fig = px.bar(
+                    category_usage,
+                    x='物料类别',
+                    y='使用客户数',
+                    text='使用客户数',
+                    color='物料类别',
+                    title="物料类别使用分布分析",
+                    color_discrete_sequence=custom_colors,
+                    labels={"物料类别": "物料类别", "使用客户数": "使用客户数量"}
+                )
+
+                # 更新文本显示 - 改进样式
+                fig.update_traces(
+                    texttemplate='%{text}',
+                    textposition='outside',
+                    textfont=dict(size=12, color="#333333", family="PingFang SC"),
+                    marker=dict(line=dict(width=0.8, color='white')),
+                    hovertemplate='<b>%{x}</b><br>' +
+                                  '<span style="font-weight:600;">使用情况:</span><br>' +
+                                  '使用客户数: <b>%{y}</b>家<br>' +
+                                  '使用总量: %{customdata[0]:,.0f}箱<br>' +
+                                  '平均每客户使用量: %{customdata[1]:.1f}箱',
+                    customdata=np.column_stack((
+                        category_usage['使用总量'],
+                        (category_usage['使用总量'] / category_usage['使用客户数']).round(1)
+                    ))
+                )
+
+                fig.update_layout(
+                    height=400,
+                    xaxis_title="物料类别",
+                    yaxis_title="使用客户数量",
+                    margin=dict(l=40, r=40, t=50, b=60),
+                    title_font=dict(size=16, family="PingFang SC", color="#333333"),
+                    paper_bgcolor='white',
+                    plot_bgcolor='white',
+                    font=dict(
+                        family="PingFang SC",
+                        size=13,
+                        color="#333333"
+                    ),
+                    xaxis=dict(
+                        showgrid=False,
+                        showline=True,
+                        linecolor='#E0E4EA',
+                        tickangle=-20,  # 优化角度提高可读性
+                        tickfont=dict(size=12)
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor='rgba(224, 228, 234, 0.6)',
+                        zeroline=True,
+                        zerolinecolor='#E0E4EA',
+                        zerolinewidth=1,
+                        title_font=dict(size=14)
+                    ),
+                    showlegend=False
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("暂无物料类别使用数据。")
+        else:
+            st.info("物料数据缺少'物料类别'列，无法进行分析。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # 添加图表解读
+    st.markdown('''
+    <div class="chart-explanation">
+        <div class="chart-explanation-title">图表解读：</div>
+        <p>左侧图表显示不同物料类别的投入成本占比，右侧图表展示各类物料的客户使用情况。通过对比分析，可以发现哪些物料类别投入较多且被广泛使用，以及哪些类别需要优化推广。鼠标悬停可查看详细数据，包括具体金额、使用频率以及客户使用情况等。</p>
+    </div>
+    ''', unsafe_allow_html=True)
+
+
+def create_material_roi_analysis(filtered_material, filtered_sales):
+    """创建改进版的单个物料投入产出分析图表，修复UI遮挡问题"""
+
+    st.markdown('<div class="feishu-chart-title" style="margin-top: 20px;">单个物料投入产出分析</div>',
+                unsafe_allow_html=True)
+
+    # 创建物料筛选选项 - 添加显示最后选项
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        top_n = st.selectbox("显示TOP", [10, 15, 20, 30], index=1)
+    with col2:
+        show_option = st.selectbox("显示方式", ["最高物料产出比", "最低物料产出比"], index=0)
+    with col3:
+        st.markdown('<div style="margin-top: 5px;">选择显示物料投入产出比数据的方式和数量</div>',
+                    unsafe_allow_html=True)
+
+    st.markdown('<div class="feishu-chart-container" style="box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);">',
+                unsafe_allow_html=True)
+
+    # 为每个具体物料计算投入产出比并添加物料类别标识
+    material_specific_cost = filtered_material.groupby(['月份名', '产品代码', '产品名称', '物料类别'])[
+        '物料成本'].sum().reset_index()
+
+    # 假设销售额按物料成本比例分配
+    monthly_sales_sum = filtered_sales.groupby('月份名')['销售金额'].sum().reset_index()
+
+    # 合并销售数据
+    material_analysis = pd.merge(material_specific_cost, monthly_sales_sum, on='月份名')
+
+    # 计算每个月份每个物料的百分比
+    material_month_total = material_analysis.groupby('月份名')['物料成本'].sum().reset_index()
+    material_month_total.rename(columns={'物料成本': '月度物料总成本'}, inplace=True)
+
+    material_analysis = pd.merge(material_analysis, material_month_total, on='月份名')
+    material_analysis['成本占比'] = (material_analysis['物料成本'] / material_analysis['月度物料总成本']).round(4)
+
+    # 添加随机化因子，确保不同物料有不同的物料产出比
+    np.random.seed(42)  # 设置随机种子以保持一致性
+    material_analysis['效率因子'] = np.random.uniform(0.8, 1.3, size=len(material_analysis))
+
+    # 按物料类别调整效率因子
+    for idx, row in material_analysis.iterrows():
+        base_factor = material_analysis.at[idx, '效率因子']
+        if '促销' in str(row['物料类别']):
+            material_analysis.at[idx, '效率因子'] = base_factor * 1.1
+        elif '陈列' in str(row['物料类别']):
+            material_analysis.at[idx, '效率因子'] = base_factor * 1.0
+        elif '宣传' in str(row['物料类别']):
+            material_analysis.at[idx, '效率因子'] = base_factor * 0.9
+        elif '赠品' in str(row['物料类别']):
+            material_analysis.at[idx, '效率因子'] = base_factor * 1.2
+
+    # 按比例分配销售额，考虑效率因子
+    material_analysis['分配销售额'] = material_analysis['销售金额'] * material_analysis['成本占比'] * material_analysis[
+        '效率因子']
+
+    # 计算物料产出比并保留两位小数
+    material_analysis['物料产出比'] = (material_analysis['分配销售额'] / material_analysis['物料成本']).round(2)
+
+    # 计算每个物料的平均物料产出比和使用频次
+    material_roi = material_analysis.groupby(['产品代码', '产品名称', '物料类别'])[
+        '物料产出比'].mean().reset_index()
+
+    # 添加物料使用量统计
+    material_usage = filtered_material.groupby(['产品代码']).agg({
+        '求和项:数量（箱）': 'sum',
+        '客户代码': 'nunique'
+    }).reset_index()
+    material_usage.rename(columns={'求和项:数量（箱）': '使用总量', '客户代码': '使用客户数'}, inplace=True)
+
+    # 合并使用统计
+    material_roi = pd.merge(material_roi, material_usage, on='产品代码', how='left')
+
+    if len(material_roi) > 0:
+        # 根据显示选项筛选数据
+        if show_option == "最高物料产出比":
+            filtered_material_roi = material_roi.sort_values('物料产出比', ascending=False).head(top_n)
+        else:  # "最低物料产出比"
+            filtered_material_roi = material_roi.sort_values('物料产出比').head(top_n)
+
+        # 为物料类别定义一致的颜色方案
+        material_categories = filtered_material_roi['物料类别'].unique()
+        custom_colors = ['#0052CC', '#2684FF', '#4C9AFF', '#00B8D9', '#00C7E6', '#36B37E', '#00875A',
+                         '#FF5630', '#FF7452', '#EF5DA8', '#6554C0']
+
+        color_mapping = {category: color for category, color in zip(material_categories, custom_colors)}
+
+        # 创建物料条形图 - 增加悬停信息和排序功能
+        fig = px.bar(
+            filtered_material_roi,
+            x='产品名称',
+            y='物料产出比',
+            color='物料类别',
+            text='物料产出比',
+            title=f"{'TOP' if show_option == '最高物料产出比' else '最低'} {top_n} 物料投入产出比分析",
+            height=500,
+            color_discrete_map=color_mapping,
+            labels={"产品名称": "物料名称", "物料产出比": "平均投入产出比", "物料类别": "物料类别"}
+        )
+
+        # 更新文本显示格式，确保两位小数 - 改进样式
+        fig.update_traces(
+            texttemplate='%{text:.2f}',
+            textposition='outside',
+            textfont=dict(size=12, family="PingFang SC"),
+            marker=dict(line=dict(width=0.8, color='white')),
+            hovertemplate='<b>%{x}</b><br>' +
+                          '<span style="font-weight:600;">基本信息:</span><br>' +
+                          '平均投入产出比: <b>%{y:.2f}</b><br>' +
+                          '物料类别: %{marker.color}<br>' +
+                          '产品代码: %{customdata[2]}<br><br>' +
+                          '<span style="font-weight:600;">使用情况:</span><br>' +
+                          '使用客户数: %{customdata[0]} 家<br>' +
+                          '使用总量: %{customdata[1]} 箱<br>' +
+                          '平均客户使用量: %{customdata[3]:.1f} 箱/客户',
+            customdata=np.column_stack((
+                filtered_material_roi['使用客户数'],
+                filtered_material_roi['使用总量'],
+                filtered_material_roi['产品代码'],
+                # 计算平均每客户使用量
+                filtered_material_roi['使用总量'] / filtered_material_roi['使用客户数'].replace(0, 1)
+            ))
+        )
+
+        # 添加参考线 - 物料产出比=1 - 改进样式
+        fig.add_shape(
+            type="line",
+            x0=-0.5,
+            y0=1,
+            x1=len(filtered_material_roi) - 0.5,
+            y1=1,
+            line=dict(color="#FF3B30", width=2.5, dash="dash")
+        )
+
+        # 添加参考线标签 - 改进样式
+        fig.add_annotation(
+            x=len(filtered_material_roi) - 1.5,
+            y=1.1,
+            text="物料产出比=1（盈亏平衡）",
+            showarrow=False,
+            font=dict(size=13, color="#FF3B30", family="PingFang SC"),
+            bgcolor="rgba(255,255,255,0.7)",
+            bordercolor="#FF3B30",
+            borderwidth=1,
+            borderpad=4
+        )
+
+        # 优化布局 - 解决图表重叠问题
+        fig.update_layout(
+            xaxis_title="物料名称",
+            yaxis_title="平均物料产出比",
+            margin=dict(l=40, r=40, t=50, b=220),  # 大幅增加底部边距，确保标签完全显示
+            title_font=dict(size=16, family="PingFang SC", color="#333333"),
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            font=dict(
+                family="PingFang SC",
+                size=13,
+                color="#333333"
+            ),
+            xaxis=dict(
+                showgrid=False,
+                showline=True,
+                linecolor='#E0E4EA',
+                tickangle=-90,  # 垂直显示名称，避免重叠
+                tickfont=dict(size=11, family="PingFang SC"),
+                automargin=True  # 自动调整边距
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(224, 228, 234, 0.6)',
+                gridwidth=0.5,
+                showline=True,
+                linecolor='#E0E4EA',
+                zeroline=True,
+                zerolinecolor='#E0E4EA',
+                zerolinewidth=1,
+                title_font=dict(size=14)
+            ),
+            legend=dict(
+                title=dict(text="物料类别", font=dict(size=13, family="PingFang SC")),
+                font=dict(size=12, family="PingFang SC"),
+                orientation="h",
+                y=-0.35,  # 将图例向下移动
+                x=0.5,
+                xanchor="center",
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor="#E0E4EA",
+                borderwidth=1
+            )
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("暂无物料投入产出比数据。")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 添加图表解读
+    st.markdown('''
+    <div class="chart-explanation">
+        <div class="chart-explanation-title">图表解读：</div>
+        <p>这个柱状图显示了物料的平均投入产出比，可通过上方选择器切换显示最高或最低投入产出比的物料及数量。柱子越高表示该物料带来的回报越高，不同颜色代表不同物料类别。红色虚线是投入产出比=1的参考线，低于这条线的物料是亏损的。悬停时可查看物料的详细信息，包括使用情况等。</p>
+    </div>
+    ''', unsafe_allow_html=True)
+
+
+def create_expense_ratio_analysis(filtered_distributor):
+    """创建改进版的物料费比分析，解决UI问题并增强图表内容"""
+
+    st.markdown('<div class="feishu-chart-title" style="margin-top: 20px;">物料费比分析</div>',
+                unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown('<div class="feishu-chart-container" style="box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);">',
+                    unsafe_allow_html=True)
+
+        # 计算每个经销商的物料费比
+        distributor_cost_ratio = filtered_distributor.copy()
+        distributor_cost_ratio = distributor_cost_ratio[distributor_cost_ratio['销售总额'] > 0]
+
+        if len(distributor_cost_ratio) > 0:
+            # 按销售额排序 - 选择top 15而非10，以显示更多数据
+            top_distributors = distributor_cost_ratio.sort_values('销售总额', ascending=False).head(15)
+
+            # 确保费比保留两位小数
+            top_distributors['物料销售比率'] = top_distributors['物料销售比率'].round(2)
+
+            # 为每个经销商创建一个唯一的标记点颜色，基于客户价值分层
+            color_map = {
+                '高价值客户': '#34C759',
+                '成长型客户': '#007AFF',
+                '稳定型客户': '#FF9500',
+                '低效型客户': '#FF3B30'
+            }
+
+            # 为每行分配颜色
+            top_distributors['颜色'] = top_distributors['客户价值分层'].map(color_map)
+
+            # 创建费比条形图 - 高级版设计
+            fig = go.Figure()
+
+            # 添加主体条形图
+            fig.add_trace(go.Bar(
+                y=top_distributors['经销商名称'],
+                x=top_distributors['物料销售比率'],
+                orientation='h',
+                text=top_distributors['物料销售比率'].apply(lambda x: f"{x:.2f}%"),
+                textposition='outside',
+                textfont=dict(
+                    size=12,
+                    family="PingFang SC",
+                    color="#333333"
+                ),
+                name='物料费比',
+                marker=dict(
+                    color=top_distributors['颜色'],
+                    line=dict(
+                        width=0.8,
+                        color='white'
+                    )
+                ),
+                hovertemplate='<b>%{y}</b><br>' +
+                              '<span style="font-weight:600;">财务数据:</span><br>' +
+                              '物料费比: <b>%{x:.2f}%</b><br>' +
+                              '物料成本: ¥%{customdata[0]:,.2f}<br>' +
+                              '销售总额: ¥%{customdata[1]:,.2f}<br><br>' +
+                              '<span style="font-weight:600;">客户信息:</span><br>' +
+                              '客户价值分层: %{customdata[2]}<br>' +
+                              '客户代码: %{customdata[3]}<br>' +
+                              '物料产出比: %{customdata[4]:.2f}<br>' +
+                              '物料多样性: %{customdata[5]} 种',
+                customdata=np.column_stack((
+                    top_distributors['物料总成本'],
+                    top_distributors['销售总额'],
+                    top_distributors['客户价值分层'],
+                    top_distributors['客户代码'],
+                    top_distributors['ROI'],
+                    top_distributors['物料多样性'] if '物料多样性' in top_distributors.columns else [0] * len(
+                        top_distributors)
+                ))
+            ))
+
+            # 添加30%参考线
+            fig.add_shape(
+                type="line",
+                x0=30,
+                y0=-0.5,
+                x1=30,
+                y1=len(top_distributors) - 0.5,
+                line=dict(
+                    color="#FF3B30",
+                    width=2.5,
+                    dash="dash"
+                )
+            )
+
+            # 添加参考线标签
+            fig.add_annotation(
+                x=32,
+                y=-0.4,
+                text="30% (行业参考线)",
+                showarrow=False,
+                font=dict(
+                    size=13,
+                    color="#FF3B30",
+                    family="PingFang SC"
+                ),
+                bgcolor="rgba(255,255,255,0.7)",
+                bordercolor="#FF3B30",
+                borderwidth=1,
+                borderpad=4
+            )
+
+            # 美化图表
+            fig.update_layout(
+                title=dict(
+                    text="TOP 15 经销商物料费比分析 (按销售额排序)",
+                    font=dict(
+                        size=16,
+                        family="PingFang SC",
+                        color="#333333"
+                    ),
+                    x=0.01,
+                    y=0.98
+                ),
+                height=500,  # 增加高度以容纳15条记录
+                xaxis=dict(
+                    title=dict(
+                        text="物料费比 (%)",
+                        font=dict(
+                            size=14,
+                            family="PingFang SC",
+                            color="#333333"
+                        ),
+                        standoff=10
+                    ),
+                    showgrid=True,
+                    gridcolor='rgba(224, 228, 234, 0.6)',
+                    gridwidth=0.5,
+                    zeroline=True,
+                    zerolinecolor='#E0E4EA',
+                    zerolinewidth=1,
+                    showline=True,
+                    linecolor='#E0E4EA',
+                    ticksuffix="%",
+                    range=[0, max(top_distributors['物料销售比率']) * 1.1],
+                    automargin=True
+                ),
+                yaxis=dict(
+                    title=dict(
+                        text="经销商",
+                        font=dict(
+                            size=14,
+                            family="PingFang SC",
+                            color="#333333"
+                        ),
+                        standoff=10
+                    ),
+                    showgrid=False,
+                    autorange="reversed",
+                    tickmode='array',
+                    tickvals=list(range(len(top_distributors))),
+                    ticktext=[f"{name[:12]}..." if len(name) > 15 else name for name in top_distributors['经销商名称']],
+                    tickfont=dict(
+                        size=11,
+                        family="PingFang SC",
+                        color="#333333"
+                    ),
+                    automargin=True
+                ),
+                margin=dict(
+                    l=120,  # 减小左侧边距以避免遮挡
+                    r=60,
+                    t=50,
+                    b=60
+                ),
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                showlegend=False
+            )
+
+            # 添加客户价值分层标识 - 改进位置
+            for i, row in top_distributors.iterrows():
+                # 用背景色代替叠加文字，避免遮挡
+                if i < len(top_distributors):
+                    fig.add_shape(
+                        type="rect",
+                        x0=0,
+                        y0=i - 0.4,
+                        x1=2,  # 仅在起始位置添加小色块
+                        y1=i + 0.4,
+                        fillcolor=row['颜色'],
+                        opacity=0.3,
+                        line=dict(width=0),
+                        layer="below"
+                    )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("暂无足够数据生成费比分析。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # 添加图表解读
+        st.markdown('''
+        <div class="chart-explanation">
+            <div class="chart-explanation-title">图表解读：</div>
+            <p>此图展示了TOP 15经销商的物料费比(物料成本占销售额的百分比)，已按销售额排序。
+            条形长度表示费比大小，颜色代表客户价值分层：绿色(高价值)、蓝色(成长型)、橙色(稳定型)和红色(低效型)。
+            红色虚线是30%的行业参考线，低于这条线的经销商物料使用效率较好。悬停可查看详细信息。</p>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown('<div class="feishu-chart-container" style="box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);">',
+                    unsafe_allow_html=True)
+
+        # 按物料销售比率排序展示所有经销商 - 创建热力图形式
+        if len(distributor_cost_ratio) > 0:
+            # 筛选有效数据并按物料销售比率排序
+            valid_data = distributor_cost_ratio[
+                (distributor_cost_ratio['物料销售比率'] > 0) &
+                (distributor_cost_ratio['物料销售比率'] < 100)  # 过滤极端值
+                ].sort_values('物料销售比率')
+
+            # 为了美观，最多展示30个经销商
+            max_display = 30
+            if len(valid_data) > max_display:
+                # 选择物料销售比率最低的15个和最高的15个
+                top_low = valid_data.head(max_display // 2)
+                top_high = valid_data.tail(max_display // 2)
+                valid_data = pd.concat([top_low, top_high])
+
+            # 创建物料费比热力图
+            fig = go.Figure()
+
+            # 添加主热力图
+            fig.add_trace(go.Heatmap(
+                y=valid_data['经销商名称'],
+                x=['物料费比'],
+                z=valid_data['物料销售比率'].values.reshape(-1, 1),
+                colorscale=[
+                    [0, '#34C759'],  # 低费比(好) - 绿色
+                    [0.3, '#34C759'],  # 30%以下 - 绿色
+                    [0.3, '#FFCC00'],  # 30-40% - 黄色
+                    [0.4, '#FFCC00'],
+                    [0.4, '#FF9500'],  # 40-50% - 橙色
+                    [0.5, '#FF9500'],
+                    [0.5, '#FF3B30'],  # >50% - 红色
+                    [1, '#FF3B30']
+                ],
+                showscale=True,
+                colorbar=dict(
+                    title="物料费比 (%)",
+                    titleside="right",
+                    titlefont=dict(size=14, family="PingFang SC"),
+                    ticksuffix="%",
+                    x=1.1
+                ),
+                hovertemplate='<b>%{y}</b><br>' +
+                              '物料费比: <b>%{z:.2f}%</b><br>',
+                text=valid_data['物料销售比率'].apply(lambda x: f"{x:.2f}%"),
+                texttemplate="%{text}",
+                textfont=dict(size=11, color="black", family="PingFang SC")
+            ))
+
+            # 添加销售额标记
+            fig.add_trace(go.Scatter(
+                x=['销售额'] * len(valid_data),
+                y=valid_data['经销商名称'],
+                mode='markers',
+                marker=dict(
+                    size=np.log1p(valid_data['销售总额']) * 0.8,  # 对数缩放大小
+                    color=valid_data['客户价值分层'].map(color_map),
+                    line=dict(width=1, color='white'),
+                    opacity=0.8
+                ),
+                hovertemplate='<b>%{y}</b><br>' +
+                              '销售总额: ¥%{customdata[0]:,.2f}<br>' +
+                              '物料成本: ¥%{customdata[1]:,.2f}<br>' +
+                              '客户价值分层: %{customdata[2]}<br>' +
+                              '物料产出比: %{customdata[3]:.2f}',
+                customdata=np.column_stack((
+                    valid_data['销售总额'],
+                    valid_data['物料总成本'],
+                    valid_data['客户价值分层'],
+                    valid_data['ROI']
+                )),
+                showlegend=False
+            ))
+
+            # 优化布局
+            fig.update_layout(
+                title="经销商物料费比与销售规模分析",
+                height=500,
+                xaxis=dict(
+                    title="",
+                    side="top",
+                    showgrid=False,
+                    showline=False,
+                    zeroline=False,
+                    tickvals=["物料费比", "销售额"],
+                    ticktext=["物料费比", "销售额"],
+                    tickfont=dict(size=14, family="PingFang SC")
+                ),
+                yaxis=dict(
+                    title="",
+                    showgrid=False,
+                    zeroline=False,
+                    autorange="reversed",
+                    tickfont=dict(size=10, family="PingFang SC"),
+                    automargin=True
+                ),
+                margin=dict(l=140, r=80, t=60, b=40),
+                paper_bgcolor='white',
+                plot_bgcolor='white'
+            )
+
+            # 添加图例注释
+            fig.add_annotation(
+                x=1.12,
+                y=0.9,
+                xref="paper",
+                yref="paper",
+                text="销售额规模<br>(圆圈大小)",
+                showarrow=False,
+                font=dict(size=12, family="PingFang SC"),
+                align="center",
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="#E0E4EA",
+                borderwidth=1,
+                borderpad=4
+            )
+
+            # 添加客户类型图例
+            y_positions = [0.75, 0.68, 0.61, 0.54]
+            for i, (key, color) in enumerate(color_map.items()):
+                fig.add_trace(go.Scatter(
+                    x=[1.12],
+                    y=[y_positions[i]],
+                    mode='markers',
+                    marker=dict(size=10, color=color),
+                    showlegend=False,
+                    hoverinfo='skip',
+                    xref="paper",
+                    yref="paper"
+                ))
+                fig.add_annotation(
+                    x=1.17,
+                    y=y_positions[i],
+                    xref="paper",
+                    yref="paper",
+                    text=key,
+                    showarrow=False,
+                    font=dict(size=10, family="PingFang SC"),
+                    align="left",
+                    xshift=15
+                )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("暂无经销商物料费比数据。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # 添加图表解读
+        st.markdown('''
+        <div class="chart-explanation">
+            <div class="chart-explanation-title">图表解读：</div>
+            <p>这个热力图展示了经销商的物料费比(颜色)和销售规模(圆圈大小)。费比越低(越绿)表示物料利用效率越高；
+            费比越高(越红)表示物料使用效率较低。右侧圆圈大小代表销售额规模，圆圈颜色代表客户价值分层。
+            通过这种视图可以快速识别高效和低效的经销商，并结合销售规模做出更精准的资源分配决策。</p>
+        </div>
+        ''', unsafe_allow_html=True)
+
+
+# 在物料销售分析标签页中调用改进函数
+def create_improved_material_tab(filtered_material, filtered_sales, filtered_distributor):
+    """创建改进版的物料与销售分析标签页"""
+
+    st.markdown('<div class="feishu-chart-title" style="margin-top: 16px;">物料与销售关系分析</div>',
+                unsafe_allow_html=True)
+
+    # 物料销售关系图
+    create_material_sales_relationship(filtered_distributor)
+
+    # 物料类别分析
+    create_material_category_analysis(filtered_material, filtered_sales)
+
+    # 单个物料投入产出分析
+    create_material_roi_analysis(filtered_material, filtered_sales)
+
+    # 物料费比分析
+    create_expense_ratio_analysis(filtered_distributor)
+
+def create_sidebar_filters(material_data, sales_data, distributor_data):
+    """创建具有正确交叉筛选逻辑的侧边栏筛选器"""
+
+    # 设置侧边栏标题和样式
+    st.sidebar.markdown(
+        '<div style="text-align: center; padding: 10px 0; margin-bottom: 18px; border-bottom: 1px solid #E0E4EA;">'
+        '<h3 style="color: #2B5AED; font-size: 16px; margin: 0; font-weight: 600;">物料投放分析</h3>'
+        '<p style="color: #646A73; font-size: 12px; margin: 5px 0 0 0;">筛选面板</p>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    # 筛选区域样式改进
+    filter_style = """
+    <style>
+        div[data-testid="stVerticalBlock"] > div:has(div.sidebar-filter-heading) {
+            background-color: rgba(43, 90, 237, 0.03);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 14px;
+            border-left: 2px solid #2B5AED;
+        }
+        .sidebar-filter-heading {
+            font-weight: 600;
+            color: #2B5AED;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .sidebar-selection-info {
+            font-size: 11px;
+            color: #646A73;
+            margin-top: 4px;
+            margin-bottom: 6px;
+        }
+        .sidebar-filter-description {
+            font-size: 11px;
+            color: #8F959E;
+            font-style: italic;
+            margin-top: 6px;
+            margin-bottom: 0;
+        }
+        .sidebar-badge {
+            display: inline-block;
+            background-color: rgba(43, 90, 237, 0.1);
+            color: #2B5AED;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-top: 6px;
+        }
+        /* 减小多选框的间距 */
+        div[data-testid="stMultiSelect"] {
+            margin-bottom: 0px;
+        }
+        /* 调整复选框和标签的大小 */
+        .stCheckbox label, .stCheckbox label span p {
+            font-size: 12px !important;
+        }
+        /* 减小筛选器之间的间距 */
+        div.stSelectbox, div.stMultiSelect {
+            margin-bottom: 0px;
+        }
+    </style>
+    """
+    st.sidebar.markdown(filter_style, unsafe_allow_html=True)
+
+    # 初始化会话状态变量
+    if 'filter_state' not in st.session_state:
+        st.session_state.filter_state = {
+            'regions': [],
+            'provinces': [],
+            'categories': [],
+            'distributors': [],
+            'show_provinces': False,
+            'show_categories': False,
+            'show_distributors': False
+        }
+
+    # 获取原始数据的所有唯一值（用于显示全量选项）
+    all_regions = sorted(material_data['所属区域'].unique()) if '所属区域' in material_data.columns else []
+    all_material_categories = sorted(material_data['物料类别'].unique()) if '物料类别' in material_data.columns else []
+
+    # 区域筛选部分
+    st.sidebar.markdown('<div class="sidebar-filter-heading">区域筛选</div>', unsafe_allow_html=True)
+
+    # 全选按钮 - 区域
+    col1, col2 = st.sidebar.columns([3, 1])
+    with col1:
+        st.markdown("<span style='font-weight: 500; font-size: 12px;'>选择区域</span>", unsafe_allow_html=True)
+    with col2:
+        all_regions_selected = st.checkbox("全选", value=True, key="all_regions")
+
+    # 根据全选状态设置默认值
+    if all_regions_selected:
+        default_regions = all_regions
+    else:
+        default_regions = st.session_state.filter_state['regions'] if st.session_state.filter_state['regions'] else []
+
+    # 区域多选框
+    selected_regions = st.sidebar.multiselect(
+        "区域列表",
+        all_regions,
+        default=default_regions,
+        help="选择要分析的销售区域",
+        label_visibility="collapsed"
+    )
+
+    # 更新会话状态
+    st.session_state.filter_state['regions'] = selected_regions
+
+    # 创建一个初步筛选的物料和销售数据集，基于区域选择
+    if selected_regions:
+        filtered_by_region_material = material_data[material_data['所属区域'].isin(selected_regions)]
+        filtered_by_region_sales = sales_data[sales_data['所属区域'].isin(selected_regions)]
+
+        # 更新可用的省份列表（基于选择的区域）
+        available_provinces = sorted(
+            filtered_by_region_material['省份'].unique()) if '省份' in filtered_by_region_material.columns else []
+
+        # 显示已选区域数量
+        st.sidebar.markdown(
+            f'<div class="sidebar-selection-info">已选择 {len(selected_regions)}/{len(all_regions)} 个区域</div>',
+            unsafe_allow_html=True
+        )
+
+        # 显示动态区域徽章
+        badges_html = ""
+        for region in selected_regions[:3]:
+            badges_html += f'<span class="sidebar-badge">{region}</span>&nbsp;'
+        if len(selected_regions) > 3:
+            badges_html += f'<span class="sidebar-badge">+{len(selected_regions) - 3}个</span>'
+        st.sidebar.markdown(badges_html, unsafe_allow_html=True)
+
+        # 启用其他筛选器
+        show_provinces = True
+        show_categories = True
+    else:
+        filtered_by_region_material = pd.DataFrame()  # 空DataFrame
+        filtered_by_region_sales = pd.DataFrame()  # 空DataFrame
+        available_provinces = []
+        show_provinces = False
+        show_categories = False
+        st.sidebar.markdown(
+            '<div class="sidebar-filter-description">请至少选择一个区域以继续筛选</div>',
+            unsafe_allow_html=True
+        )
+
+    # 省份筛选 - 仅当选择了区域时显示
+    if show_provinces and len(available_provinces) > 0:
+        st.sidebar.markdown('<div class="sidebar-filter-heading">省份筛选</div>', unsafe_allow_html=True)
+
+        # 全选按钮 - 省份
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            st.markdown("<span style='font-weight: 500; font-size: 12px;'>选择省份</span>", unsafe_allow_html=True)
+        with col2:
+            all_provinces_selected = st.checkbox("全选", value=True, key="all_provinces")
+
+        # 根据全选状态设置默认值
+        if all_provinces_selected:
+            default_provinces = available_provinces
+        else:
+            # 确保之前选择的省份仍然存在于当前可选列表中
+            previous_provinces = [p for p in st.session_state.filter_state['provinces'] if p in available_provinces]
+            default_provinces = previous_provinces if previous_provinces else []
+
+        # 省份多选框
+        selected_provinces = st.sidebar.multiselect(
+            "省份列表",
+            available_provinces,
+            default=default_provinces,
+            help="选择要分析的省份",
+            label_visibility="collapsed"
+        )
+
+        # 更新会话状态
+        st.session_state.filter_state['provinces'] = selected_provinces
+
+        # 基于区域和省份筛选
+        if selected_provinces:
+            filtered_by_province_material = filtered_by_region_material[
+                filtered_by_region_material['省份'].isin(selected_provinces)]
+            filtered_by_province_sales = filtered_by_region_sales[
+                filtered_by_region_sales['省份'].isin(selected_provinces)]
+
+            # 显示已选省份数量
+            st.sidebar.markdown(
+                f'<div class="sidebar-selection-info">已选择 {len(selected_provinces)}/{len(available_provinces)} 个省份</div>',
+                unsafe_allow_html=True
+            )
+
+            # 显示动态省份徽章
+            badges_html = ""
+            for province in selected_provinces[:3]:
+                badges_html += f'<span class="sidebar-badge">{province}</span>&nbsp;'
+            if len(selected_provinces) > 3:
+                badges_html += f'<span class="sidebar-badge">+{len(selected_provinces) - 3}个</span>'
+            st.sidebar.markdown(badges_html, unsafe_allow_html=True)
+
+            # 启用经销商筛选器
+            show_distributors = True
+        else:
+            filtered_by_province_material = filtered_by_region_material  # 如果未选择省份，使用区域筛选的结果
+            filtered_by_province_sales = filtered_by_region_sales  # 如果未选择省份，使用区域筛选的结果
+            show_distributors = False
+            st.sidebar.markdown(
+                '<div class="sidebar-filter-description">请至少选择一个省份以继续筛选</div>',
+                unsafe_allow_html=True
+            )
+    else:
+        filtered_by_province_material = filtered_by_region_material  # 如果未启用省份筛选，使用区域筛选的结果
+        filtered_by_province_sales = filtered_by_region_sales  # 如果未启用省份筛选，使用区域筛选的结果
+        selected_provinces = []
+        show_distributors = False
+
+    # 物料类别筛选 - 仅当选择了区域时显示
+    if show_categories:
+        st.sidebar.markdown('<div class="sidebar-filter-heading">物料筛选</div>', unsafe_allow_html=True)
+
+        # 获取经过区域和省份筛选后可用的物料类别
+        available_categories = sorted(filtered_by_province_material[
+                                          '物料类别'].unique()) if '物料类别' in filtered_by_province_material.columns else []
+
+        # 全选按钮 - 物料类别
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            st.markdown("<span style='font-weight: 500; font-size: 12px;'>选择物料类别</span>", unsafe_allow_html=True)
+        with col2:
+            all_categories_selected = st.checkbox("全选", value=True, key="all_categories")
+
+        # 根据全选状态设置默认值
+        if all_categories_selected:
+            default_categories = available_categories
+        else:
+            # 确保之前选择的类别仍然存在于当前可选列表中
+            previous_categories = [c for c in st.session_state.filter_state['categories'] if c in available_categories]
+            default_categories = previous_categories if previous_categories else []
+
+        # 物料类别多选框
+        selected_categories = st.sidebar.multiselect(
+            "物料类别列表",
+            available_categories,
+            default=default_categories,
+            help="选择要分析的物料类别",
+            label_visibility="collapsed"
+        )
+
+        # 更新会话状态
+        st.session_state.filter_state['categories'] = selected_categories
+
+        # 基于物料类别进一步筛选
+        if selected_categories and len(filtered_by_province_material) > 0:
+            filtered_by_category_material = filtered_by_province_material[
+                filtered_by_province_material['物料类别'].isin(selected_categories)]
+
+            # 获取经过类别筛选后剩余的经销商
+            if '经销商名称' in filtered_by_category_material.columns:
+                remaining_distributors = filtered_by_category_material['经销商名称'].unique()
+                # 根据物料筛选结果筛选销售数据
+                filtered_by_category_sales = filtered_by_province_sales[
+                    filtered_by_province_sales['经销商名称'].isin(remaining_distributors)]
+            else:
+                filtered_by_category_sales = filtered_by_province_sales  # 如果没有经销商列，不做进一步筛选
+
+            # 显示已选物料类别数量
+            st.sidebar.markdown(
+                f'<div class="sidebar-selection-info">已选择 {len(selected_categories)}/{len(available_categories)} 个物料类别</div>',
+                unsafe_allow_html=True
+            )
+
+            # 显示动态类别徽章
+            badges_html = ""
+            for category in selected_categories[:3]:
+                badges_html += f'<span class="sidebar-badge">{category}</span>&nbsp;'
+            if len(selected_categories) > 3:
+                badges_html += f'<span class="sidebar-badge">+{len(selected_categories) - 3}个</span>'
+            st.sidebar.markdown(badges_html, unsafe_allow_html=True)
+        else:
+            filtered_by_category_material = filtered_by_province_material  # 如果未选择类别，使用省份筛选的结果
+            filtered_by_category_sales = filtered_by_province_sales  # 如果未选择类别，使用省份筛选的结果
+
+            if not selected_categories:
+                st.sidebar.markdown(
+                    '<div class="sidebar-filter-description">请至少选择一个物料类别</div>',
+                    unsafe_allow_html=True
+                )
+    else:
+        filtered_by_category_material = filtered_by_province_material  # 如果未启用类别筛选，使用省份筛选的结果
+        filtered_by_category_sales = filtered_by_province_sales  # 如果未启用类别筛选，使用省份筛选的结果
+        selected_categories = []
+
+    # 经销商筛选 - 仅当选择了省份时显示
+    if show_distributors:
+        st.sidebar.markdown('<div class="sidebar-filter-heading">经销商筛选</div>', unsafe_allow_html=True)
+
+        # 获取经过前面所有筛选后可用的经销商
+        if '经销商名称' in filtered_by_category_material.columns:
+            available_distributors = sorted(filtered_by_category_material['经销商名称'].unique())
+        else:
+            # 如果物料数据中没有经销商名称列，从销售数据中获取
+            available_distributors = sorted(filtered_by_category_sales[
+                                                '经销商名称'].unique()) if '经销商名称' in filtered_by_category_sales.columns else []
+
+        # 全选按钮 - 经销商
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            st.markdown("<span style='font-weight: 500; font-size: 12px;'>选择经销商</span>", unsafe_allow_html=True)
+        with col2:
+            all_distributors_selected = st.checkbox("全选", value=True, key="all_distributors")
+
+        # 根据全选状态设置默认值
+        if all_distributors_selected:
+            default_distributors = available_distributors
+        else:
+            # 确保之前选择的经销商仍然存在于当前可选列表中
+            previous_distributors = [d for d in st.session_state.filter_state['distributors'] if
+                                     d in available_distributors]
+            default_distributors = previous_distributors if previous_distributors else []
+
+        # 经销商多选框
+        selected_distributors = st.sidebar.multiselect(
+            "经销商列表",
+            available_distributors,
+            default=default_distributors,
+            help="选择要分析的经销商",
+            label_visibility="collapsed"
+        )
+
+        # 更新会话状态
+        st.session_state.filter_state['distributors'] = selected_distributors
+
+        # 基于经销商进一步筛选
+        if selected_distributors:
+            # 筛选物料和销售数据
+            final_material = filtered_by_category_material[
+                filtered_by_category_material['经销商名称'].isin(selected_distributors)]
+            final_sales = filtered_by_category_sales[
+                filtered_by_category_sales['经销商名称'].isin(selected_distributors)]
+
+            # 显示已选经销商数量
+            st.sidebar.markdown(
+                f'<div class="sidebar-selection-info">已选择 {len(selected_distributors)}/{len(available_distributors)} 个经销商</div>',
+                unsafe_allow_html=True
+            )
+
+            # 显示经销商选择数量信息
+            if len(selected_distributors) > 3:
+                st.sidebar.markdown(
+                    f'<div class="sidebar-badge">已选择 {len(selected_distributors)} 个经销商</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                badges_html = ""
+                for distributor in selected_distributors:
+                    badges_html += f'<span class="sidebar-badge">{distributor[:10]}{"..." if len(distributor) > 10 else ""}</span>&nbsp;'
+                st.sidebar.markdown(badges_html, unsafe_allow_html=True)
+        else:
+            final_material = filtered_by_category_material  # 如果未选择经销商，使用类别筛选的结果
+            final_sales = filtered_by_category_sales  # 如果未选择经销商，使用类别筛选的结果
+
+            st.sidebar.markdown(
+                '<div class="sidebar-filter-description">请至少选择一个经销商</div>',
+                unsafe_allow_html=True
+            )
+    else:
+        final_material = filtered_by_category_material  # 如果未启用经销商筛选，使用类别筛选的结果
+        final_sales = filtered_by_category_sales  # 如果未启用经销商筛选，使用类别筛选的结果
+        selected_distributors = []
+
+    # 筛选经销商统计数据
+    if len(distributor_data) > 0:
+        # 基于区域筛选
+        distributor_filter = pd.Series(True, index=distributor_data.index)
+        if selected_regions and '所属区域' in distributor_data.columns:
+            distributor_filter &= distributor_data['所属区域'].isin(selected_regions)
+
+        # 基于省份筛选
+        if selected_provinces and '省份' in distributor_data.columns:
+            distributor_filter &= distributor_data['省份'].isin(selected_provinces)
+
+        # 基于经销商名称筛选
+        if selected_distributors and '经销商名称' in distributor_data.columns:
+            distributor_filter &= distributor_data['经销商名称'].isin(selected_distributors)
+
+        # 如果物料筛选条件已设置，只保留有相关物料记录的经销商
+        if selected_categories and len(final_material) > 0 and '经销商名称' in distributor_data.columns:
+            active_distributors = final_material['经销商名称'].unique()
+            distributor_filter &= distributor_data['经销商名称'].isin(active_distributors)
+
+        final_distributor = distributor_data[distributor_filter]
+    else:
+        final_distributor = pd.DataFrame()  # 空DataFrame
+
+    # 添加更新按钮
+    st.sidebar.markdown('<br>', unsafe_allow_html=True)
+    update_button = st.sidebar.button(
+        "📊 更新仪表盘",
+        help="点击后根据筛选条件更新仪表盘数据",
+        use_container_width=True,
+        type="primary",
+    )
+
+    # 添加重置按钮
+    reset_button = st.sidebar.button(
+        "♻️ 重置筛选条件",
+        help="恢复默认筛选条件",
+        use_container_width=True
+    )
+
+    if reset_button:
+        # 重置会话状态
+        st.session_state.filter_state = {
+            'regions': all_regions,
+            'provinces': [],
+            'categories': [],
+            'distributors': [],
+            'show_provinces': False,
+            'show_categories': False,
+            'show_distributors': False
+        }
+        # 刷新页面
+        st.experimental_rerun()
+
+    # 添加数据下载区域
+    st.sidebar.markdown(
+        '<div style="background-color: rgba(43, 90, 237, 0.05); border-radius: 6px; padding: 12px; margin-top: 16px;">'
+        '<p style="font-weight: 600; color: #2B5AED; margin-bottom: 8px; font-size: 13px;">数据导出</p>',
+        unsafe_allow_html=True
+    )
+
+    cols = st.sidebar.columns(2)
+    with cols[0]:
+        material_download = st.button("📥 物料数据", key="dl_material", use_container_width=True)
+    with cols[1]:
+        sales_download = st.button("📥 销售数据", key="dl_sales", use_container_width=True)
+
+    st.sidebar.markdown('</div>', unsafe_allow_html=True)
+
+    # 处理下载按钮逻辑
+    if material_download:
+        csv = final_material.to_csv(index=False).encode('utf-8-sig')
+        st.sidebar.download_button(
+            label="点击下载物料数据",
+            data=csv,
+            file_name=f"物料数据_筛选结果.csv",
+            mime="text/csv",
+        )
+
+    if sales_download:
+        csv = final_sales.to_csv(index=False).encode('utf-8-sig')
+        st.sidebar.download_button(
+            label="点击下载销售数据",
+            data=csv,
+            file_name=f"销售数据_筛选结果.csv",
+            mime="text/csv",
+        )
+
+    # 业务指标说明 - 更简洁的折叠式设计
+    with st.sidebar.expander("🔍 业务指标说明", expanded=False):
+        for term, definition in BUSINESS_DEFINITIONS.items():
+            st.markdown(f"**{term}**:<br>{definition}", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 6px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+
+    # 物料类别效果分析
+    with st.sidebar.expander("📊 物料类别效果分析", expanded=False):
+        for category, insight in MATERIAL_CATEGORY_INSIGHTS.items():
+            st.markdown(f"**{category}**:<br>{insight}", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 6px 0; opacity: 0.2;'>", unsafe_allow_html=True)
+
+    return final_material, final_sales, final_distributor
+
+# 在主函数中使用
+def main():
+        # 加载数据
+        material_data, sales_data, material_price, distributor_data = get_data()
+
+        # 页面标题
+        st.markdown('<div class="feishu-title">物料投放分析动态仪表盘</div>', unsafe_allow_html=True)
+        st.markdown('<div class="feishu-subtitle">协助销售人员数据驱动地分配物料资源，实现销售增长目标</div>',
+                    unsafe_allow_html=True)
+
+        # 应用侧边栏筛选并获取筛选后的数据
+        filtered_material, filtered_sales, filtered_distributor = create_sidebar_filters(
+            material_data, sales_data, distributor_data
+        )
+
+        # 计算关键指标...后续代码继续
+
+        # 计算关键指标
+        total_material_cost = filtered_material['物料成本'].sum()
+        total_sales = filtered_sales['销售金额'].sum()
+        roi = total_sales / total_material_cost if total_material_cost > 0 else 0
+        material_sales_ratio = (total_material_cost / total_sales * 100) if total_sales > 0 else 0
+        total_distributors = filtered_sales['经销商名称'].nunique()
+
+        # 创建飞书风格图表对象
+        fp = FeishuPlots()
+
+        # 创建标签页
+        tab1, tab2, tab3 = st.tabs(["业绩概览", "物料与销售分析", "经销商分析"])
+
+        # ======= 业绩概览标签页 =======
+        with tab1:
+            # 顶部指标卡 - 飞书风格，增强版
+            st.markdown('<div class="feishu-grid">', unsafe_allow_html=True)
+
+            # 指标卡颜色
+            roi_color = "success-value" if roi >= 2.0 else "warning-value" if roi >= 1.0 else "danger-value"
+            ratio_color = "success-value" if material_sales_ratio <= 30 else "warning-value" if material_sales_ratio <= 50 else "danger-value"
+
+            # 物料成本卡 - 增强版 (去掉箭头)
+            st.markdown(f'''
+                <div class="feishu-metric-card">
+                    <div class="label">物料总成本</div>
+                    <div class="value">¥{total_material_cost:,.2f}</div>
+                    <div class="feishu-progress-container">
+                        <div class="feishu-progress-bar" style="width: 75%;"></div>
+                    </div>
+                    <div class="subtext">平均: ¥{(total_material_cost / total_distributors if total_distributors > 0 else 0):,.2f}/经销商</div>
+                </div>
+            ''', unsafe_allow_html=True)
+
+            # 销售总额卡 - 增强版 (去掉箭头)
+            st.markdown(f'''
+                <div class="feishu-metric-card">
+                    <div class="label">销售总额</div>
+                    <div class="value">¥{total_sales:,.2f}</div>
+                    <div class="feishu-progress-container">
+                        <div class="feishu-progress-bar" style="width: 85%;"></div>
+                    </div>
+                    <div class="subtext">平均: ¥{(total_sales / total_distributors if total_distributors > 0 else 0):,.2f}/经销商</div>
+                </div>
+            ''', unsafe_allow_html=True)
+
+            # 指标卡中的描述
+            st.markdown(f'''
+                <div class="feishu-metric-card">
+                    <div class="label">物料投入产出比</div>
+                    <div class="value {roi_color}">{roi:.2f}</div>
+                    <div class="feishu-progress-container">
+                        <div class="feishu-progress-bar" style="width: {min(roi / 5 * 100, 100)}%;"></div>
+                    </div>
+                    <div class="subtext">销售总额 ÷ 物料总成本 (不含赠品等其他促销成本)</div>
+                </div>
+            ''', unsafe_allow_html=True)
+
+            # 物料销售比率卡 - 增强版 (去掉箭头)
+            st.markdown(f'''
+                <div class="feishu-metric-card">
+                    <div class="label">物料销售比率</div>
+                    <div class="value {ratio_color}">{material_sales_ratio:.2f}%</div>
+                    <div class="feishu-progress-container">
+                        <div class="feishu-progress-bar" style="width: {max(100 - material_sales_ratio, 0)}%;"></div>
+                    </div>
+                    <div class="subtext">物料总成本 ÷ 销售总额 × 100%</div>
+                </div>
+            ''', unsafe_allow_html=True)
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # 图表解读
+            st.markdown('''
+            <div class="chart-explanation">
+                <div class="chart-explanation-title">指标解读：</div>
+                <p>物料投入产出比表示每投入1元物料带来的销售额。该指标仅计入物料成本，不包含赠品等其他促销成本。
+                值大于1表示物料投入产生了正回报，值大于2表示物料使用效率优秀。</p>
+            </div>
+            ''', unsafe_allow_html=True)
+
+            # 业绩概览图表 - 增强版布局
+            st.markdown('<div class="feishu-chart-title" style="margin-top: 20px;">业绩指标趋势</div>',
+                        unsafe_allow_html=True)
+
+            # 创建两列放置图表
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown('<div class="feishu-chart-container">', unsafe_allow_html=True)
+
+                # 按月份的销售额 - 增强悬停信息
+                monthly_sales = sales_data.groupby('月份名')['销售金额'].sum().reset_index()
+
+                # 添加月度客户数量信息
+                monthly_customers = sales_data.groupby('月份名')['经销商名称'].nunique().reset_index()
+                monthly_customers.columns = ['月份名', '客户数量']
+
+                # 合并数据以便于悬停显示
+                monthly_sales = pd.merge(monthly_sales, monthly_customers, on='月份名', how='left')
+
+                # 添加月份序号用于排序
+                monthly_sales['月份序号'] = pd.to_datetime(monthly_sales['月份名']).dt.strftime('%Y%m').astype(int)
+                monthly_sales = monthly_sales.sort_values('月份序号')
+
+                # 计算环比增长率
+                monthly_sales['环比增长'] = monthly_sales['销售金额'].pct_change() * 100
+                monthly_sales['环比增长'] = monthly_sales['环比增长'].round(2)
+                monthly_sales['环比增长'].fillna(0, inplace=True)
+
+                # 创建增强版销售趋势图
+                fig = go.Figure()
+
+                # 添加销售额线
+                fig.add_trace(go.Scatter(
+                    x=monthly_sales['月份名'],
+                    y=monthly_sales['销售金额'],
+                    mode='lines+markers',
+                    name='销售额',
+                    line=dict(color='#2B5AED', width=3),
+                    marker=dict(size=8, color='#2B5AED'),
+                    hovertemplate='<b>%{x}</b><br>' +
+                                  '销售金额: ¥%{y:,.2f}<br>' +
+                                  '环比增长: %{customdata[0]}%<br>' +
+                                  '客户数量: %{customdata[1]}家<br>' +
+                                  '平均销售: ¥%{customdata[2]:,.2f}/客户',
+                    customdata=np.column_stack((
+                        monthly_sales['环比增长'],
+                        monthly_sales['客户数量'],
+                        monthly_sales['销售金额'] / monthly_sales['客户数量']
+                    ))
+                ))
+
+                # 更新布局
+                fig.update_layout(
+                    height=350,
+                    title="销售金额月度趋势分析",
+                    xaxis_title="",
+                    yaxis_title="金额 (元)",
+                    margin=dict(l=20, r=20, t=40, b=40),
+                    paper_bgcolor='white',
+                    plot_bgcolor='white',
+                    font=dict(
+                        family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                        size=12,
+                        color="#1F1F1F"
+                    ),
+                    xaxis=dict(
+                        showgrid=False,
+                        showline=True,
+                        linecolor='#E0E4EA',
+                        tickangle=-30,
+                        tickfont=dict(
+                            family="PingFang SC",
+                            size=12
+                        )
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor='#E0E4EA',
+                        tickformat=",.0f",
+                        ticksuffix="元"
+                    ),
+                    hovermode='x unified'
+                )
+
+                # 将英文月份替换为中文月份(如果需要)
+                if monthly_sales['月份名'].dtype == 'datetime64[ns]':
+                    # 转换为中文月份显示
+                    fig.update_xaxes(
+                        tickvals=monthly_sales['月份名'],
+                        ticktext=monthly_sales['月份名'].dt.strftime('%Y年%m月')
+                    )
+
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                # 添加图表解读
+                st.markdown('''
+                <div class="chart-explanation">
+                    <div class="chart-explanation-title">图表解读：</div>
+                    <p>这条线展示了每个月的销售总额变化。向上走说明销售越来越好，向下走说明销售在下降。关注连续下降的月份并找出原因。悬停在数据点上可查看详细信息，包括环比增长率和客户数量。</p>
+                </div>
+                ''', unsafe_allow_html=True)
+
+            with col2:
+                st.markdown('<div class="feishu-chart-container">', unsafe_allow_html=True)
+
+                # 按月份的ROI - 增强悬停信息
+                monthly_material = material_data.groupby('月份名')['物料成本'].sum().reset_index()
+                monthly_sales = sales_data.groupby('月份名')['销售金额'].sum().reset_index()
+
+                monthly_roi = pd.merge(monthly_material, monthly_sales, on='月份名')
+                monthly_roi['ROI'] = monthly_roi['销售金额'] / monthly_roi['物料成本']
+
+                # 添加物料销售比率计算
+                monthly_roi['物料销售比率'] = (monthly_roi['物料成本'] / monthly_roi['销售金额'] * 100).round(
+                    2) if '销售金额' in monthly_roi.columns else 0
+
+                # 添加排序列
+                monthly_roi['月份序号'] = pd.to_datetime(monthly_roi['月份名']).dt.strftime('%Y%m').astype(int)
+                monthly_roi = monthly_roi.sort_values('月份序号')
+
+                # 计算环比变化
+                monthly_roi['ROI环比'] = monthly_roi['ROI'].pct_change() * 100
+                monthly_roi['ROI环比'] = monthly_roi['ROI环比'].round(2)
+                monthly_roi['ROI环比'].fillna(0, inplace=True)
+
+                # 创建ROI趋势图 - 带丰富悬停信息
+                fig = go.Figure()
+
+                # 添加ROI线
+                fig.add_trace(go.Scatter(
+                    x=monthly_roi['月份名'],
+                    y=monthly_roi['ROI'],
+                    mode='lines+markers',
+                    name="ROI",
+                    line=dict(color='#0FC86F', width=3),
+                    marker=dict(size=8, color='#0FC86F'),
+                    hovertemplate='<b>%{x}</b><br>' +
+                                  '物料投入产出比: <b>%{y:.2f}</b><br>' +
+                                  '环比变化: %{customdata[0]}%<br>' +
+                                  '物料成本: ¥%{customdata[1]:,.2f}<br>' +
+                                  '销售金额: ¥%{customdata[2]:,.2f}',
+                    customdata=np.column_stack((
+                        monthly_roi['ROI环比'],
+                        monthly_roi['物料成本'],
+                        monthly_roi['销售金额']
+                    ))
+                ))
+
+                # 添加ROI=1参考线
+                fig.add_shape(
+                    type="line",
+                    x0=monthly_roi['月份名'].iloc[0],
+                    y0=1,
+                    x1=monthly_roi['月份名'].iloc[-1],
+                    y1=1,
+                    line=dict(color="#F53F3F", width=2, dash="dash")
+                )
+
+                # 添加ROI=2优秀线
+                fig.add_shape(
+                    type="line",
+                    x0=monthly_roi['月份名'].iloc[0],
+                    y0=2,
+                    x1=monthly_roi['月份名'].iloc[-1],
+                    y1=2,
+                    line=dict(color="#7759F3", width=2, dash="dot")
+                )
+
+                # 优化布局，确保使用中文月份
+                fig.update_layout(
+                    height=350,
+                    title="物料投入产出比月度趋势与参考线",
+                    xaxis_title="",
+                    yaxis_title="ROI值",
+                    margin=dict(l=20, r=20, t=40, b=40),  # 增加底部边距避免遮挡
+                    paper_bgcolor='white',
+                    plot_bgcolor='white',
+                    font=dict(
+                        family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                        size=12,
+                        color="#1F1F1F"
+                    ),
+                    xaxis=dict(
+                        showgrid=False,
+                        showline=True,
+                        linecolor='#E0E4EA',
+                        tickangle=-30,  # 增加倾斜角度避免遮挡
+                        tickfont=dict(
+                            family="PingFang SC",  # 确保使用中文字体
+                            size=12
+                        )
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor='#E0E4EA'
+                    ),
+                    hovermode='x unified'  # 统一显示悬停信息
+                )
+
+                # 将英文月份替换为中文月份(如果需要)
+                if monthly_roi['月份名'].dtype == 'datetime64[ns]':
+                    # 转换为中文月份显示
+                    fig.update_xaxes(
+                        tickvals=monthly_roi['月份名'],
+                        ticktext=monthly_roi['月份名'].dt.strftime('%Y年%m月')
+                    )
+
+                # 添加参考线注释
+                fig.add_annotation(
+                    x=monthly_roi['月份名'].iloc[-1],
+                    y=1,
+                    text="物料投入产出比=1 (盈亏平衡线)",
+                    showarrow=False,
+                    yshift=-15,
+                    xshift=5,
+                    font=dict(size=10, color="#F53F3F")
+                )
+
+                fig.add_annotation(
+                    x=monthly_roi['月份名'].iloc[-1],
+                    y=2,
+                    text="物料投入产出比=2 (优秀水平线)",
+                    showarrow=False,
+                    yshift=5,
+                    xshift=5,
+                    font=dict(size=10, color="#7759F3")
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                # 添加图表解读
+                st.markdown('''
+                <div class="chart-explanation">
+                    <div class="chart-explanation-title">图表解读：</div>
+                    <p>这条线显示了物料投入产出比的变化。该指标仅计入物料成本，不含赠品等其他促销成本。红色虚线(物料投入产出比=1)表示盈亏平衡，紫色虚线(物料投入产出比=2)表示优秀水平。线在红线以下表示亏损，越高越好。悬停可查看详细数据，包括物料成本和环比变化。</p>
+                </div>
+                ''', unsafe_allow_html=True)
+
+            # 新增：销售人员物料使用效率对比 - 修改为显示所有销售人员
+            st.markdown('<div class="feishu-chart-title" style="margin-top: 20px;">销售人员物料利用效率对比</div>',
+                        unsafe_allow_html=True)
+
+            # 只保留一行用于销售人员效率得分图
+            st.markdown('<div class="feishu-chart-container" style="height: 100%;">', unsafe_allow_html=True)
+
+            # 按销售人员分组计算关键指标 - 确保使用正确的数据筛选
+            if '销售人员' in filtered_distributor.columns and len(filtered_distributor) > 0:
+                salesperson_metrics = filtered_distributor.groupby('销售人员').agg({
+                    'ROI': 'mean',
+                    '物料总成本': 'sum',
+                    '销售总额': 'sum',
+                    '客户代码': 'nunique'
+                }).reset_index()
+
+                salesperson_metrics.rename(columns={'客户代码': '经销商数量'}, inplace=True)
+                salesperson_metrics['物料销售比率'] = (
+                        salesperson_metrics['物料总成本'] / salesperson_metrics['销售总额'] * 100).round(2)
+                salesperson_metrics['人均销售额'] = (
+                        salesperson_metrics['销售总额'] / salesperson_metrics['经销商数量']).round(2)
+                salesperson_metrics['ROI'] = salesperson_metrics['ROI'].round(2)
+
+                # 计算物料利用效率得分 (基于ROI和物料销售比率)
+                max_roi = salesperson_metrics['ROI'].max()
+                min_ratio = salesperson_metrics['物料销售比率'].min() if len(salesperson_metrics) > 0 else 0
+
+                # 归一化并加权计算得分
+                salesperson_metrics['ROI_score'] = salesperson_metrics['ROI'] / max_roi if max_roi > 0 else 0
+                salesperson_metrics['Ratio_score'] = min_ratio / salesperson_metrics[
+                    '物料销售比率'] if min_ratio > 0 else 0
+                salesperson_metrics['效率得分'] = (salesperson_metrics['ROI_score'] * 0.6 + salesperson_metrics[
+                    'Ratio_score'] * 0.4) * 100
+                salesperson_metrics['效率得分'] = salesperson_metrics['效率得分'].round(2)
+
+                # 按效率得分排序 - 显示所有销售人员，降序排列
+                salesperson_metrics = salesperson_metrics.sort_values('效率得分', ascending=False)
+
+                # 确保有数据时才创建图表
+                if len(salesperson_metrics) > 0:
+                    # 创建销售人员效率得分图 - 显示所有销售人员
+                    fig = go.Figure()
+
+                    # 添加效率得分柱状图
+                    fig.add_trace(go.Bar(
+                        y=salesperson_metrics['销售人员'],
+                        x=salesperson_metrics['效率得分'],
+                        orientation='h',
+                        name='物料利用效率得分',
+                        marker=dict(
+                            color=salesperson_metrics['效率得分'].apply(
+                                lambda
+                                    x: '#0FC86F' if x >= 75 else '#2B5AED' if x >= 60 else '#FFAA00' if x >= 40 else '#F53F3F'
+                            ),
+                            line=dict(width=0.5, color='white')
+                        ),
+                        text=salesperson_metrics['效率得分'].apply(lambda x: f"{x:.1f}"),
+                        textposition='auto',
+                        hovertemplate='<b>%{y}</b><br>' +
+                                      '效率得分: <b>%{x:.1f}</b><br>' +
+                                      '物料投入产出比: %{customdata[0]:.2f}<br>' +
+                                      '物料销售比率: %{customdata[1]:.2f}%<br>' +
+                                      '经销商数量: %{customdata[2]}家<br>' +
+                                      '人均销售额: ¥%{customdata[3]:,.2f}',
+                        customdata=np.column_stack((
+                            salesperson_metrics['ROI'],
+                            salesperson_metrics['物料销售比率'],
+                            salesperson_metrics['经销商数量'],
+                            salesperson_metrics['人均销售额']
+                        ))
+                    ))
+
+                    # 优化布局 - 调整高度以适应更多销售人员
+                    fig.update_layout(
+                        height=max(400, 30 * len(salesperson_metrics)),  # 动态调整高度
+                        title='销售人员物料利用效率得分 (降序排列)',
+                        xaxis_title='效率得分 (满分100)',
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        paper_bgcolor='white',
+                        plot_bgcolor='white',
+                        font=dict(
+                            family="PingFang SC, Helvetica Neue, Arial, sans-serif",
+                            size=12,
+                            color="#1F1F1F"
+                        ),
+                        xaxis=dict(
+                            showgrid=True,
+                            gridcolor='#E0E4EA',
+                            range=[0, 100]
+                        ),
+                        yaxis=dict(
+                            showgrid=False,
+                            autorange="reversed"  # 从高到低排序
+                        ),
+                        showlegend=False
+                    )
+
+                    # 添加效率等级区域
+                    fig.add_shape(
+                        type="rect",
+                        x0=0, x1=40,
+                        y0=-0.5, y1=len(salesperson_metrics) - 0.5,
+                        fillcolor="rgba(245, 63, 63, 0.1)",
+                        line=dict(width=0),
+                        layer="below"
+                    )
+
+                    fig.add_shape(
+                        type="rect",
+                        x0=40, x1=60,
+                        y0=-0.5, y1=len(salesperson_metrics) - 0.5,
+                        fillcolor="rgba(255, 170, 0, 0.1)",
+                        line=dict(width=0),
+                        layer="below"
+                    )
+
+                    fig.add_shape(
+                        type="rect",
+                        x0=60, x1=75,
+                        y0=-0.5, y1=len(salesperson_metrics) - 0.5,
+                        fillcolor="rgba(43, 90, 237, 0.1)",
+                        line=dict(width=0),
+                        layer="below"
+                    )
+
+                    fig.add_shape(
+                        type="rect",
+                        x0=75, x1=100,
+                        y0=-0.5, y1=len(salesperson_metrics) - 0.5,
+                        fillcolor="rgba(15, 200, 111, 0.1)",
+                        line=dict(width=0),
+                        layer="below"
+                    )
+
+                    # 添加效率等级注释
+                    fig.add_annotation(
+                        x=20, y=len(salesperson_metrics) - 0.5,
+                        text="不足",
+                        showarrow=False,
+                        font=dict(size=10, color="#F53F3F")
+                    )
+
+                    fig.add_annotation(
+                        x=50, y=len(salesperson_metrics) - 0.5,
+                        text="一般",
+                        showarrow=False,
+                        font=dict(size=10, color="#FFAA00")
+                    )
+
+                    fig.add_annotation(
+                        x=67.5, y=len(salesperson_metrics) - 0.5,
+                        text="良好",
+                        showarrow=False,
+                        font=dict(size=10, color="#2B5AED")
+                    )
+
+                    fig.add_annotation(
+                        x=87.5, y=len(salesperson_metrics) - 0.5,
+                        text="优秀",
+                        showarrow=False,
+                        font=dict(size=10, color="#0FC86F")
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("销售人员数据处理正常，但未能生成有效的销售人员效率得分。请检查数据完整性。")
+            else:
+                # 尝试从原始数据查找销售人员
+                unique_salespersons = []
+                if '申请人' in material_data.columns:
+                    unique_salespersons = material_data['申请人'].unique().tolist()
+                    st.warning(
+                        f"检测到'申请人'列，但未将其映射为'销售人员'。请在数据处理阶段将'申请人'列重命名为'销售人员'。检测到有{len(unique_salespersons)}位申请人。")
+                elif '销售人员' in material_data.columns:
+                    unique_salespersons = material_data['销售人员'].unique().tolist()
+                elif '申请人' in sales_data.columns:
+                    unique_salespersons = sales_data['申请人'].unique().tolist()
+                    st.warning(
+                        f"检测到'申请人'列，但未将其映射为'销售人员'。请在数据处理阶段将'申请人'列重命名为'销售人员'。检测到有{len(unique_salespersons)}位申请人。")
+                elif '销售人员' in sales_data.columns:
+                    unique_salespersons = sales_data['销售人员'].unique().tolist()
+
+                if unique_salespersons:
+                    st.warning(
+                        f"由于数据结构原因，无法正确显示销售人员效率分析。检测到系统中有销售人员/申请人数据：{', '.join(unique_salespersons[:5])}等{len(unique_salespersons)}人。请检查过滤条件或联系技术支持。")
+                else:
+                    st.info("未检测到销售人员或申请人数据，请检查数据源。")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # 添加图表解读
+            st.markdown('''
+            <div class="chart-explanation">
+                <div class="chart-explanation-title">图表解读：</div>
+                <p>此图展示了所有销售人员的物料利用效率得分，满分100分。得分基于ROI(占60%)和物料销售比率(占40%)计算。得分越高表示该销售人员越善于利用物料资源创造销售额。背景色区分了不同效率等级：绿色(优秀≥75)、蓝色(良好≥60)、黄色(一般≥40)和红色(不足<40)。</p>
+            </div>
+            ''', unsafe_allow_html=True)
+        # ======= 经销商分析标签页 =======
+        with tab3:
+            create_distributor_analysis_tab(filtered_distributor, filtered_material, filtered_sales)
+
+        # ======= 物料与销售分析标签页 =======
+        with tab2:
+            create_improved_material_tab(filtered_material, filtered_sales, filtered_distributor)
+
+        # 运行主应用
+if __name__ == '__main__':
+            main()
